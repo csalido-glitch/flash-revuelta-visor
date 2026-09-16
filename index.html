@@ -120,14 +120,68 @@ nav.tabs { display:flex; gap:4px; margin:18px 0 20px; flex-wrap:wrap; }
 .tile .u { font-size:15px; font-weight:600; color:var(--ink-2); margin-left:3px; }
 .tile .n { font-size:13px; color:var(--muted); margin-top:7px; }
 .tile.hero .v { font-size:46px; }
-.tile.apagada { opacity:.55; }
-.tile.apagada .v { font-size:20px; color:var(--muted); font-weight:600; }
 
 .otros { margin-top:14px; padding:12px 16px; border:1px dashed var(--axis);
          border-radius:10px; font-size:13px; color:var(--ink-2);
          display:flex; gap:18px; flex-wrap:wrap; align-items:center; }
 .otros b { color:var(--ink); font-variant-numeric:tabular-nums; }
 .otros .et { color:var(--muted); font-size:12px; }
+
+/* ---------- tira de pulso: el latido de la operacion ---------- */
+.pulso { display:grid; grid-template-columns:auto 1fr auto; gap:18px; align-items:center;
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:18px 22px; box-shadow:var(--shadow); margin-bottom:16px; }
+@media (max-width:700px){ .pulso { grid-template-columns:auto 1fr; gap:12px; }
+  .pulso .ultima { grid-column:1 / -1; text-align:left; border-left:none;
+                   border-top:1px solid var(--border); padding:12px 0 0; } }
+
+.latido { display:flex; align-items:center; gap:11px; }
+.latido .aro { position:relative; width:13px; height:13px; border-radius:50%; flex:none; }
+.latido .aro::after { content:""; position:absolute; inset:-6px; border-radius:50%;
+  border:2px solid currentColor; opacity:0; }
+.pulso.activa   .aro { background:var(--good); color:var(--good); }
+.pulso.activa   .aro::after { animation:latir 2.6s ease-out infinite; }
+.pulso.lenta    .aro { background:var(--warning); color:var(--warning); }
+.pulso.parada   .aro { background:var(--critical); color:var(--critical); }
+.pulso.sindato  .aro { background:var(--muted); color:var(--muted); }
+@keyframes latir { 0%{opacity:.6;transform:scale(.6)} 70%{opacity:0;transform:scale(1.35)} 100%{opacity:0} }
+@media (prefers-reduced-motion: reduce){ .latido .aro::after{ animation:none } }
+
+.latido .txt .est { font-size:15px; font-weight:700; letter-spacing:.02em; line-height:1.2; }
+.pulso.activa  .txt .est { color:var(--good); }
+.pulso.lenta   .txt .est { color:var(--ink); }
+.pulso.parada  .txt .est { color:var(--critical); }
+.pulso.sindato .txt .est { color:var(--muted); }
+.latido .txt .cuando { font-size:13px; color:var(--muted); margin-top:2px; }
+
+.pulso .ritmo-nota { font-size:13px; color:var(--muted); }
+.pulso .ultima { text-align:right; font-size:13px; color:var(--ink-2);
+                 border-left:1px solid var(--border); padding-left:18px; }
+.pulso .ultima b { display:block; font-size:19px; font-weight:700; color:var(--ink);
+                   font-variant-numeric:tabular-nums; }
+
+/* ---------- feed de ultimas pesadas ---------- */
+.feed { display:flex; flex-direction:column; gap:2px; }
+.feed .it { display:grid; grid-template-columns:62px 1fr auto auto; gap:14px; align-items:center;
+  padding:11px 12px; border-radius:10px; font-size:13px; }
+@media (max-width:620px){ .feed .it { grid-template-columns:54px 1fr auto; }
+  .feed .it .hace { display:none; } }
+.feed .it + .it { border-top:1px solid var(--grid); }
+.feed .it .hr { font-variant-numeric:tabular-nums; font-weight:700; color:var(--ink); }
+.feed .it .qn { color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                display:flex; align-items:center; gap:8px; }
+.feed .it .qn em { font-style:normal; color:var(--muted); }
+.feed .it .tn { font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.feed .it .hace { color:var(--muted); font-variant-numeric:tabular-nums;
+                  min-width:76px; text-align:right; }
+.feed .it.nuevo { animation:destello 6s ease-out 1; }
+@keyframes destello {
+  0%   { background:color-mix(in srgb,var(--good) 26%, transparent); }
+  12%  { background:color-mix(in srgb,var(--good) 26%, transparent); }
+  100% { background:transparent; }
+}
+@media (prefers-reduced-motion: reduce){ .feed .it.nuevo { animation:none;
+  box-shadow:inset 3px 0 0 var(--good); } }
 
 /* ---------- barras por procedencia ---------- */
 .barras { display:flex; flex-direction:column; gap:14px; }
@@ -241,6 +295,16 @@ td .recorta.media  { max-width:146px; }
 
   <!-- ================= HOY ================= -->
   <section id="p-hoy">
+    <div class="pulso sindato" id="pulso">
+      <div class="latido">
+        <span class="aro"></span>
+        <div class="txt"><div class="est" id="pEstado">—</div>
+                         <div class="cuando" id="pCuando">—</div></div>
+      </div>
+      <div class="ritmo-nota" id="pRitmo"></div>
+      <div class="ultima" id="pUltima"></div>
+    </div>
+
     <div class="hero-grid">
       <div class="tile hero">
         <div class="k">Mineral acarreado</div>
@@ -273,17 +337,18 @@ td .recorta.media  { max-width:146px; }
     </div>
 
     <div class="card">
+      <h2>Últimas pesadas</h2>
+      <p class="sub">Lo más reciente primero. Lo que acaba de entrar se marca en verde.</p>
+      <div class="feed" id="feed"></div>
+    </div>
+
+    <div class="card">
       <h2>Ritmo por hora</h2>
       <p class="sub">Toneladas de mineral cerradas en cada hora del día.</p>
       <svg class="horas" id="svgHoras" role="img" aria-label="Toneladas por hora"></svg>
       <p class="sub" id="notaHueco" style="margin:10px 0 0"></p>
     </div>
 
-    <div class="tile apagada" style="margin-top:16px">
-      <div class="k">Peso en vivo del indicador</div>
-      <div class="v">Sin conectar</div>
-      <div class="n">Requiere leer el puerto COM4 de la báscula. Pendiente.</div>
-    </div>
   </section>
 
   <!-- ================= PATIO ================= -->
@@ -360,6 +425,14 @@ const TIBIO_MIN     = 30;     // ambar  hasta aqui, despues rojo
 const PATIO_AVISO   = 30;     // minutos en patio: naranja
 const PATIO_ALERTA  = 60;     // minutos en patio: rojo
 
+// Pulso de la operacion. El semaforo se compara contra el ritmo REAL del dia:
+// si hoy pesa cada 20 min, 40 sin pesar ya es se~nal. Estos son los multiplos.
+const PULSO_LENTA   = 2.0;    // veces el intervalo tipico -> ambar
+const PULSO_PARADA  = 4.0;    // veces el intervalo tipico -> rojo
+const PULSO_MIN_LENTA  = 30;  // piso en minutos, para dias de poco movimiento
+const PULSO_MIN_PARADA = 75;
+const FEED_N        = 6;      // cuantas pesadas muestra el feed
+
 const SERIES = ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"];
 
 /* ===================================================================
@@ -390,7 +463,7 @@ async function traer(ruta){
    ESTADO
    =================================================================== */
 const S = { salud:null, resumen:{}, patio:[], dia:[], fecha:hoyISO(), detalle:[],
-            orden:{c:"boleto",asc:false}, colores:{} };
+            orden:{c:"boleto",asc:false}, colores:{}, vistos:null };
 
 /* El color sigue a la procedencia, no a su posicion en el ranking.
    Se fija alfabeticamente sobre todas las procedencias conocidas, asi
@@ -470,6 +543,93 @@ function sello(){
 }
 
 /* ===================================================================
+   PULSO DE LA OPERACION
+   El sello de arriba responde "me esta llegando el dato".
+   Esto responde "esta trabajando la bascula ahora".
+   =================================================================== */
+const minsDesde = iso => { const d=new Date(iso);
+  return isNaN(d) ? null : Math.floor((Date.now()-d.getTime())/60000); };
+
+function hace(min){
+  if(min==null) return "—";
+  if(min < 1)  return "hace un momento";
+  if(min === 1) return "hace 1 minuto";
+  if(min < 60) return "hace "+min+" minutos";
+  const h=Math.floor(min/60), m=min%60;
+  return "hace "+h+(h===1?" hora":" horas")+(m?" "+m+" min":"");
+}
+
+/* Intervalo tipico entre pesadas del dia (mediana: no se la lleva
+   el paro de la comida ni una racha de tres seguidas). */
+function intervaloTipico(regs){
+  const ts=regs.map(r=>new Date(r.salida||r.entrada)).filter(d=>!isNaN(d)).sort((a,b)=>a-b);
+  if(ts.length<3) return null;
+  const d=[]; for(let i=1;i<ts.length;i++) d.push((ts[i]-ts[i-1])/60000);
+  d.sort((a,b)=>a-b);
+  return Math.round(d[Math.floor(d.length/2)]);
+}
+
+function pintarPulso(){
+  const caja=$("#pulso");
+  const regs=S.dia.filter(r=>r.salida||r.entrada);
+  caja.classList.remove("activa","lenta","parada","sindato");
+
+  if(!regs.length){
+    caja.classList.add("sindato");
+    $("#pEstado").textContent="SIN MOVIMIENTO";
+    $("#pCuando").textContent="No hay pesadas registradas este día.";
+    $("#pRitmo").textContent=""; $("#pUltima").innerHTML="";
+    return;
+  }
+
+  const ult=regs.slice().sort((a,b)=>
+    String(b.salida||b.entrada).localeCompare(String(a.salida||a.entrada)))[0];
+  const min=minsDesde(ult.salida||ult.entrada);
+  const tip=intervaloTipico(regs);
+
+  const uLenta  = tip ? Math.max(PULSO_MIN_LENTA,  Math.round(tip*PULSO_LENTA))  : PULSO_MIN_LENTA;
+  const uParada = tip ? Math.max(PULSO_MIN_PARADA, Math.round(tip*PULSO_PARADA)) : PULSO_MIN_PARADA;
+
+  let estado;
+  if(min==null)            { caja.classList.add("sindato"); estado="SIN DATO"; }
+  else if(min < uLenta)    { caja.classList.add("activa");  estado="ACTIVA"; }
+  else if(min < uParada)   { caja.classList.add("lenta");   estado="SIN MOVIMIENTO"; }
+  else                     { caja.classList.add("parada");  estado="DETENIDA"; }
+
+  $("#pEstado").textContent=estado;
+  $("#pCuando").textContent="Última pesada "+hace(min);
+  $("#pRitmo").textContent = tip
+    ? "Hoy viene pesando cada "+tip+" min en promedio."
+    : "";
+
+  const esMin=esMineral(ult.grupo);
+  $("#pUltima").innerHTML =
+    `<b>${nTon(ult.neto)} t</b>Boleto ${nNum(ult.boleto)} · ${esc(ult.procedencia||"—")}`
+    + (esMin ? "" : ' <span class="tag otro">no mineral</span>');
+}
+
+function pintarFeed(){
+  const regs=S.dia.filter(r=>r.salida||r.entrada)
+    .sort((a,b)=>String(b.salida||b.entrada).localeCompare(String(a.salida||a.entrada)))
+    .slice(0,FEED_N);
+  const primeraVez = S.vistos===null;
+  if(primeraVez) S.vistos=new Set();
+
+  $("#feed").innerHTML = regs.map(r=>{
+    const nuevo = !primeraVez && !S.vistos.has(r.boleto);
+    const esMin = esMineral(r.grupo);
+    return `<div class="it${nuevo?" nuevo":""}">
+      <span class="hr">${hhmm(r.salida||r.entrada)}</span>
+      <span class="qn"><span class="chip" style="background:${esMin?colorDe(r.grupo):"var(--muted)"}"></span>
+        ${esc(r.procedencia||"—")} <em>· ${esc(r.placas||"—")} · ${esc(r.chofer||"—")}</em></span>
+      <span class="tn">${nTon(r.neto)} t</span>
+      <span class="hace">${hace(minsDesde(r.salida||r.entrada))}</span>
+    </div>`;
+  }).join("");
+  regs.forEach(r=>S.vistos.add(r.boleto));
+}
+
+/* ===================================================================
    HOY
    =================================================================== */
 function pintarHoy(){
@@ -508,6 +668,9 @@ function pintarHoy(){
     cajaO.style.display="flex";
   } else cajaO.style.display="none";
 
+  fijarColores();
+  pintarPulso();
+  pintarFeed();
   pintarBarras(min);
   dibujarHoras();
 }
@@ -747,6 +910,7 @@ async function cargar(){
 cargar();
 setInterval(cargar, REFRESCO_MS);
 setInterval(sello, 20000);
+setInterval(()=>{ if(!$("#p-hoy").classList.contains("oculto")){ pintarPulso(); pintarFeed(); } }, 15000);
 addEventListener("resize", ()=>{ clearTimeout(window._rz); window._rz=setTimeout(dibujarHoras,180); });
 </script>
 </body>
