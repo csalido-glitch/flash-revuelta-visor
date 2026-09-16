@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flash de Acarreo · MRT</title>
+<title>Flash de Acarreo — Minera Río Tinto</title>
 <style>
 /* ===================================================================
    FLASH DE ACARREO - Minera Rio Tinto
@@ -23,6 +23,13 @@
   --border:       rgba(11,11,11,0.10);
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
   --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+
+  /* Marca MRT, tal como esta definida en el Reporte Flash Diario */
+  --gold:      #B8912A;
+  --gold-dark: #8a6a17;
+  --navy:      #1a2733;
+  --gold-ink:  #8a6a17;   /* dorado legible sobre fondo claro */
+
   --good:     #0ca30c;
   --warning:  #fab219;
   --serious:  #ec835a;
@@ -39,6 +46,7 @@
     --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
     --s6:#008300; --s7:#9085e9; --s8:#e66767;
     --seq: #3987e5;
+  --gold-ink: #E8B93D;   /* el dorado que usa MRT en oscuro */
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
   }
 }
@@ -50,6 +58,7 @@
   --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
   --s6:#008300; --s7:#9085e9; --s8:#e66767;
   --seq: #3987e5;
+  --gold-ink: #E8B93D;   /* el dorado que usa MRT en oscuro */
   --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
 }
 
@@ -63,17 +72,36 @@ body {
 }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px 56px; }
 
-/* ---------- encabezado ---------- */
+/* ---------- banner corporativo ----------
+   Conserva siempre su fondo claro y sus dorados: la identidad no cambia
+   con el tema. De aqui hacia abajo el tablero si responde al boton. */
+.banner-mrt { background:#ffffff; border-bottom:1px solid rgba(138,106,23,.22); }
+.banner-mrt .lienzo {
+  position:relative; max-width:1300px; margin:0 auto;
+  background-image:url('banner-mrt.png');
+  background-size:contain; background-repeat:no-repeat; background-position:center;
+  aspect-ratio:2000/220; width:100%;
+}
+.banner-mrt .titlebox {
+  position:absolute; left:30%; right:32%; top:0; bottom:0;
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+}
+.banner-mrt h1 {
+  font-size:clamp(11px, 1.3vw, 22px); font-weight:800; color:#8a6a17; margin:0;
+  letter-spacing:.2px; line-height:1.2; text-align:center; white-space:nowrap;
+  text-shadow:0 1px 0 rgba(255,255,255,.6);
+}
+.banner-mrt .subtitle { font-size:clamp(8px, .75vw, 12px); color:#444; margin-top:2px; text-align:center; }
+
+/* ---------- barra de estado ---------- */
 header {
   position: sticky; top: 0; z-index: 20;
   background: color-mix(in srgb, var(--plane) 92%, transparent);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
 }
-.hbar { max-width:1180px; margin:0 auto; padding:12px 16px;
-        display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
-.brand { font-weight:700; font-size:17px; letter-spacing:-.01em; }
-.brand small { display:block; font-weight:400; font-size:12px; color:var(--muted); letter-spacing:0; }
+.hbar { max-width:1180px; margin:0 auto; padding:10px 16px;
+        display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .spacer { flex:1 1 auto; }
 
 .seal { display:inline-flex; align-items:center; gap:8px;
@@ -89,23 +117,26 @@ header {
 .btn { font:inherit; font-size:13px; font-weight:600; color:var(--ink-2);
        background:var(--surface); border:1px solid var(--border);
        border-radius:8px; padding:7px 12px; cursor:pointer; }
-.btn:hover { color:var(--ink); border-color:var(--axis); }
+.btn:hover { color:var(--gold-ink); border-color:var(--gold); }
 
 /* ---------- pestañas ---------- */
-nav.tabs { display:flex; gap:4px; margin:18px 0 20px; flex-wrap:wrap; }
+nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .tab { font:inherit; font-size:14px; font-weight:600; color:var(--muted);
        background:none; border:none; border-bottom:2px solid transparent;
        padding:9px 14px; cursor:pointer; }
 .tab:hover { color:var(--ink-2); }
-.tab[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--s1); }
+.tab[aria-selected="true"] { color:var(--gold-ink); border-bottom-color:var(--gold); }
 .tab .badge { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:999px;
               font-size:11px; background:var(--grid); color:var(--ink-2); }
+.tab[aria-selected="true"] .badge { background:color-mix(in srgb,var(--gold) 22%, transparent);
+                                    color:var(--gold-ink); }
 
 /* ---------- tarjetas ---------- */
 .card { background:var(--surface); border:1px solid var(--border);
         border-radius:14px; padding:20px; box-shadow:var(--shadow); }
 .card + .card { margin-top:16px; }
-.card h2 { margin:0 0 4px; font-size:14px; font-weight:700; letter-spacing:.01em; }
+.card h2 { margin:0 0 4px; font-size:13px; font-weight:800; letter-spacing:.06em;
+            text-transform:uppercase; color:var(--gold-ink); }
 .card .sub { margin:0 0 18px; font-size:13px; color:var(--muted); }
 
 .hero-grid { display:grid; grid-template-columns: minmax(220px,1.1fr) 1fr 1fr 1fr; gap:14px; }
@@ -240,10 +271,10 @@ nav.tabs { display:flex; gap:4px; margin:18px 0 20px; flex-wrap:wrap; }
 .tabla-caja { overflow-x:auto; border:1px solid var(--border); border-radius:12px; }
 table { width:100%; border-collapse:collapse; font-size:12.5px; }
 th, td { padding:8px 10px; text-align:left; white-space:nowrap; }
-thead th { position:sticky; top:0; background:var(--surface); color:var(--muted);
+thead th { position:sticky; top:0; background:var(--navy); color:#fff;
            font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
-           border-bottom:1px solid var(--axis); cursor:pointer; user-select:none; }
-thead th:hover { color:var(--ink); }
+           border-bottom:none; cursor:pointer; user-select:none; }
+thead th:hover { background:#24333f; }
 tbody tr { border-bottom:1px solid var(--grid); }
 tbody tr:hover { background:var(--plane); }
 tbody tr:last-child { border-bottom:none; }
@@ -253,7 +284,7 @@ td.num { text-align:right; font-variant-numeric:tabular-nums; }
   display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap;
   font-variant-numeric:tabular-nums; }
 .resumen-tabla span { font-size:13px; color:var(--ink-2); }
-.resumen-tabla strong { font-size:19px; font-weight:700; }
+.resumen-tabla strong { font-size:19px; font-weight:700; color:var(--gold-ink); }
 .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px;
        font-weight:600; background:var(--grid); color:var(--ink-2); }
 .tag.otro { background:color-mix(in srgb,var(--muted) 22%, transparent); color:var(--ink-2); }
@@ -276,10 +307,22 @@ td .recorta.media  { max-width:146px; }
 </head>
 <body data-palette="#2a78d6,#eb6834,#1baf7a,#eda100,#e87ba4">
 
+<div class="banner-mrt">
+  <div class="lienzo">
+    <div class="titlebox">
+      <h1>FLASH DE ACARREO — MINERA RÍO TINTO</h1>
+      <div class="subtitle">Báscula Cieneguita · Urique, Chihuahua</div>
+    </div>
+  </div>
+</div>
+
 <header>
   <div class="hbar">
-    <div class="brand">Flash de Acarreo
-      <small>Báscula Cieneguita · Urique, Chihuahua</small></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true"  data-t="hoy">Hoy</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="patio">En patio<span class="badge" id="bPatio">0</span></button>
+      <button class="tab" role="tab" aria-selected="false" data-t="detalle">Detalle</button>
+    </nav>
     <div class="spacer"></div>
     <div id="seal" class="seal"><span class="dot"></span><span id="sealTxt">Conectando…</span></div>
     <button class="btn" id="tema" title="Cambiar entre claro y oscuro">Modo oscuro</button>
@@ -287,11 +330,8 @@ td .recorta.media  { max-width:146px; }
 </header>
 
 <div class="wrap">
-  <nav class="tabs" role="tablist">
-    <button class="tab" role="tab" aria-selected="true"  data-t="hoy">Hoy</button>
-    <button class="tab" role="tab" aria-selected="false" data-t="patio">En patio<span class="badge" id="bPatio">0</span></button>
-    <button class="tab" role="tab" aria-selected="false" data-t="detalle">Detalle</button>
-  </nav>
+
+  <div style="height:20px"></div>
 
   <!-- ================= HOY ================= -->
   <section id="p-hoy">
@@ -401,7 +441,7 @@ td .recorta.media  { max-width:146px; }
   </section>
 
   <p class="pie">
-    Minera Rio Tinto · el dato viene directo de la báscula, sin captura manual.<br>
+    Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
   </p>
 </div>
