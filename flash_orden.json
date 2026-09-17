@@ -1,12 +1,12 @@
 {
-  "_nota": "V3.9: dos candados. Solo corre en TI-00023 y solo lanzado por la tarea programada. Los candados se revisan DESPUES de leer esta orden, asi que desde aqui siempre se pueden corregir o apagar sin ir a bascula.",
+  "_nota": "V3.9: dos candados (solo TI-00023, solo desde la tarea) y el estado de Dropbox cada 15 min en vez de cada 3, salvo que pase algo que amerite avisar al momento.",
   "id": "v39-candados",
   "carga_dias": 0,
   "config": {
     "dias_hacia_atras": 2,
     "equipo_esperado": "TI-00023",
     "solo_tarea": true,
-    "estado_cada_min": 0
+    "estado_cada_min": 15
   },
   "actualizar": {
     "sha256": "08e42e7c694e169f362bce2579856b21e7a920277cebbaab3e66258676222b70",
