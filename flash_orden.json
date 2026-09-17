@@ -1,8 +1,12 @@
 {
-  "_nota": "Canal de mando por internet. El agente lee este archivo cada 3 minutos.",
-  "id": "normal-internet-1",
+  "_nota": "Actualiza el agente a la V3.7. El sha256 es la llave: si el archivo que llega no coincide exactamente, no se instala nada.",
+  "id": "v37",
   "carga_dias": 0,
   "config": {
     "dias_hacia_atras": 2
+  },
+  "actualizar": {
+    "sha256": "433f0266600d36bf3fcf6123315c7dd6c52a387188f5bdae7e468742d881b2ba",
+    "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }
