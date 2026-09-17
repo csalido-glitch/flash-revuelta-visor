@@ -1,8 +1,15 @@
 {
-  "_nota": "PASO B: regenera los 259 dias del historico con el corte por producto (planta / no planta). Solo lectura del webservice, cada boleto se reescribe por su numero, nada se duplica. Se ejecuta UNA sola vez.",
-  "id": "recarga-v38",
-  "carga_dias": 265,
+  "_nota": "V3.9: dos candados. Solo corre en TI-00023 y solo lanzado por la tarea programada. Los candados se revisan DESPUES de leer esta orden, asi que desde aqui siempre se pueden corregir o apagar sin ir a bascula.",
+  "id": "v39-candados",
+  "carga_dias": 0,
   "config": {
-    "dias_hacia_atras": 2
+    "dias_hacia_atras": 2,
+    "equipo_esperado": "TI-00023",
+    "solo_tarea": true,
+    "estado_cada_min": 0
+  },
+  "actualizar": {
+    "sha256": "08e42e7c694e169f362bce2579856b21e7a920277cebbaab3e66258676222b70",
+    "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }

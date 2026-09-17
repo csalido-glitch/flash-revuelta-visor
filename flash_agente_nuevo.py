@@ -36,7 +36,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "3.8"
+VERSION = "3.9"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -61,7 +61,10 @@ CONFIG_DEFAULT = {
     "carpeta_dropbox": "",
     "actualizacion_automatica": "dropbox",
     "orden_url": "",
-    "timeout_orden": 8
+    "timeout_orden": 8,
+    "equipo_esperado": "",
+    "solo_tarea": False,
+    "estado_cada_min": 0
 }
 
 # Nombres de los dos archivos del puente de Dropbox
@@ -127,17 +130,26 @@ def log(msg, nivel="INFO"):
 # Configuracion
 # --------------------------------------------------------------------------
 
+INSTALADO = [False]
+
 def cargar_config():
+    """Solo se considera una instalacion de verdad si YA hay un config.json
+    al lado. Antes, si no lo encontraba, lo creaba con valores por defecto
+    -- comodo, pero convertia cualquier copia suelta en un agente a medias:
+    bastaba un doble clic en Descargas para que encontrara Dropbox y
+    machacara flash_estado.json con un reporte vacio, y tu vieras "0 boletos,
+    sin senal" creyendo que se cayo la bascula.
+
+    Ahora una copia suelta no crea nada, no escribe nada y se sale."""
     cfg = dict(CONFIG_DEFAULT)
+    if not os.path.exists(ARCHIVO_CONFIG):
+        return cfg
     try:
-        if os.path.exists(ARCHIVO_CONFIG):
-            with open(ARCHIVO_CONFIG, "r", encoding="utf-8") as f:
-                cfg.update(json.load(f))
-        else:
-            with open(ARCHIVO_CONFIG, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, indent=2, ensure_ascii=False)
+        with open(ARCHIVO_CONFIG, "r", encoding="utf-8") as f:
+            cfg.update(json.load(f))
+        INSTALADO[0] = True
     except Exception as e:
-        print("No se pudo leer config.json, se usan valores por defecto: %s" % e)
+        print("No se pudo leer config.json: %s" % e)
     return cfg
 
 
@@ -922,6 +934,39 @@ def autoactualizar(orden):
     return nueva
 
 
+# Lo que, si cambia, amerita avisar de inmediato aunque toque esperar.
+CAMPOS_AVISO = ("agente", "modo", "boletos_procesados", "camiones_en_patio",
+                "cola_pendiente", "ws_ok", "carga_historica", "version_pendiente")
+
+
+def _vale_la_pena_escribir(ruta, estado):
+    """Con estado_cada_min en 0 se escribe siempre, como hasta ahora.
+
+    Con un numero, se escribe solo cada tantos minutos -- salvo que algo
+    que de verdad importa haya cambiado, y entonces se escribe al momento.
+    Esto existe porque Dropbox notifica cada cambio: escribiendo cada 3
+    minutos son ~480 avisos al dia, y un aviso que llega siempre deja de
+    ser un aviso. Con 15 minutos son ~30, y los que lleguen fuera de
+    tiempo significan algo.
+    """
+    cada = int(CFG.get("estado_cada_min") or 0)
+    if cada <= 0 or not os.path.exists(ruta):
+        return True
+    try:
+        with open(ruta, "r", encoding="utf-8") as f:
+            previo = json.load(f)
+    except Exception:
+        return True
+    for k in CAMPOS_AVISO:
+        if previo.get(k) != estado.get(k):
+            return True
+    try:
+        antes = datetime.fromisoformat(previo.get("ultima_corrida"))
+        return (datetime.now() - antes).total_seconds() >= cada * 60
+    except Exception:
+        return True
+
+
 def escribir_estado(estado):
     """Deja flash_estado.json en Dropbox: la ventana a la bascula
     cuando no hay acceso remoto."""
@@ -938,6 +983,8 @@ def escribir_estado(estado):
         estado = dict(estado)
         estado["bitacora_reciente"] = cola
         ruta = os.path.join(carpeta, REMOTO_ESTADO)
+        if not _vale_la_pena_escribir(ruta, estado):
+            return
         tmp = ruta + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(estado, f, indent=2, ensure_ascii=False)
@@ -946,6 +993,33 @@ def escribir_estado(estado):
         os.rename(tmp, ruta)
     except Exception as e:
         log("No se pudo escribir el estado en Dropbox: %s" % e, "WARN")
+
+
+def revisar_candados():
+    """Devuelve el motivo por el que NO debe correr, o None si puede.
+
+    Dos candados, los dos apagados de fabrica y encendidos por orden remota:
+
+      equipo_esperado  Solo corre en esa maquina. Si copian la carpeta
+                       completa a otra PC, ahi no hace nada.
+      solo_tarea       Solo corre lanzado por la tarea programada. La tarea
+                       usa pythonw.exe (sin ventana) y un doble clic usa
+                       python.exe, asi que se distinguen sin tocar la tarea.
+                       Con --manual se puede forzar a proposito.
+    """
+    esperado = str(CFG.get("equipo_esperado") or "").strip()
+    if esperado:
+        actual = (os.environ.get("COMPUTERNAME") or "").strip()
+        if actual.upper() != esperado.upper():
+            return ("Este agente esta anclado al equipo '%s' y aqui dice '%s'. "
+                    "No hace nada." % (esperado, actual or "sin nombre"))
+
+    if CFG.get("solo_tarea") and "--manual" not in sys.argv:
+        exe = os.path.basename(sys.executable or "").lower()
+        if not exe.startswith("pythonw"):
+            return ("Este agente solo corre desde su tarea programada. "
+                    "Para correrlo a proposito, agregale  --manual")
+    return None
 
 
 def es_planta(producto):
@@ -1010,11 +1084,36 @@ def rango_dia(fecha):
 def main():
     t0 = time.time()
 
+    if not INSTALADO[0]:
+        aviso = ("Esta es una copia suelta del agente: no hay config.json en su "
+                 "carpeta.\nNo hace nada y no toca ningun archivo.\n\n"
+                 "El agente instalado vive en C:\\FlashAcarreo y corre solo "
+                 "cada 3 minutos.")
+        try:
+            print(aviso)
+        except Exception:
+            pass
+        return 0
+
     if os.path.exists(ARCHIVO_STOP):
         log("Archivo STOP presente. El agente no hace nada.")
         return 0
 
     orden = leer_orden()
+
+    # Los candados se revisan DESPUES de leer la orden, a proposito. Si se
+    # revisaran antes, un dato mal escrito -- el nombre del equipo con un
+    # dedazo -- dejaria al agente muerto y sin forma de corregirlo a
+    # distancia: habria que ir a bascula. Leyendo primero la orden, siempre
+    # queda la puerta abierta para desactivarlos desde GitHub.
+    motivo = revisar_candados()
+    if motivo:
+        log(motivo)
+        try:
+            print(motivo)
+        except Exception:
+            pass
+        return 0      # sin tocar Firebase, sin tocar Dropbox, sin respaldos
 
     # Se revisa antes que nada: asi una version nueva puede llegar incluso
     # con el agente apagado, que es justo cuando mas falta hace.
