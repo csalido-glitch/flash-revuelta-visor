@@ -93,6 +93,39 @@ body {
 }
 .banner-mrt .subtitle { font-size:clamp(8px, .75vw, 12px); color:#444; margin-top:2px; text-align:center; }
 
+.segmentadores { position:sticky; top:0; z-index:40; margin:-6px -4px 16px; padding:12px 4px 10px;
+  background:var(--bg); border-bottom:1px solid var(--border);
+  display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+.seg { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.seg-t { font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+.seg-v { display:flex; gap:4px; flex-wrap:wrap; max-width:640px; }
+.seg-v button { font:inherit; font-size:12.5px; font-weight:600; color:var(--ink-2);
+  background:var(--surface); border:1px solid var(--border); border-radius:999px;
+  padding:4px 11px; cursor:pointer; white-space:nowrap; }
+.seg-v button:hover { border-color:var(--gold); color:var(--gold-ink); }
+.seg-v button[aria-pressed="true"] { background:var(--gold-dark); border-color:var(--gold-dark); color:#fff; }
+:root[data-theme="dark"] .seg-v button[aria-pressed="true"] { background:var(--gold); border-color:var(--gold); color:#1a1a19; }
+@media (prefers-color-scheme: dark){ :root:where(:not([data-theme="light"])) .seg-v button[aria-pressed="true"]{
+  background:var(--gold); border-color:var(--gold); color:#1a1a19; } }
+.seg.vacio { display:none; }
+.limpiar { font:inherit; font-size:12px; font-weight:600; color:var(--muted);
+  background:none; border:1px solid var(--border); border-radius:999px;
+  padding:5px 12px; cursor:pointer; align-self:flex-end; margin-left:auto; }
+.limpiar:hover { color:var(--gold-ink); border-color:var(--gold); }
+/* La barra crece con los filtros que haya, pero nunca se come la pantalla:
+   pasado cierto alto se desplaza sola por dentro. */
+.segmentadores { max-height:34vh; overflow-y:auto; top:var(--hh, 56px); }
+.seg-v { max-height:72px; overflow-y:auto; }
+.seg-sel { font:inherit; font-size:12.5px; font-weight:600; color:var(--ink);
+  background:var(--surface); border:1px solid var(--border); border-radius:999px;
+  padding:5px 10px; cursor:pointer; max-width:230px; }
+.seg-sel:hover { border-color:var(--gold); }
+.avisoviejo { margin:0 0 14px; padding:10px 14px; border-radius:10px; font-size:12.5px;
+  background:var(--plane); border:1px dashed var(--axis); color:var(--ink-2); }
+tbody tr.baja { cursor:pointer; }
+tbody tr.baja td:first-child::after { content:" ›"; color:var(--muted); font-weight:700; }
+tbody tr.baja:hover td:first-child::after { color:var(--gold-ink); }
+
 /* ---------- barra de estado ---------- */
 header {
   position: sticky; top: 0; z-index: 20;
@@ -260,22 +293,14 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 
 /* ---------- periodo (pildoras, estilo MRT) ---------- */
 .periodos { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:18px; }
-.controles-hist { display:flex; gap:22px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px; }
-.grupo-ctl { display:flex; flex-direction:column; gap:5px; }
-.et-ctl { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
-.controles-hist .periodos { margin-bottom:0; }
-.migas { display:flex; align-items:center; gap:2px; flex-wrap:wrap; margin-bottom:18px;
-  font-size:13px; color:var(--ink-2); min-height:26px; }
-.migas button { font:inherit; font-weight:600; color:var(--gold-ink); background:none;
-  border:none; padding:4px 7px; border-radius:7px; cursor:pointer; }
-.migas button:hover { background:var(--plane); }
-.migas .sep { color:var(--muted); padding:0 1px; user-select:none; }
-.migas .aqui { font-weight:700; color:var(--ink); padding:4px 7px; }
-tbody tr.baja { cursor:pointer; }
-tbody tr.baja td:first-child::after { content:" ›"; color:var(--muted); font-weight:700; }
-tbody tr.baja:hover td:first-child::after { color:var(--gold-ink); }
-.avisoviejo { margin:0 0 14px; padding:10px 14px; border-radius:10px; font-size:12.5px;
-  background:var(--plane); border:1px dashed var(--axis); color:var(--ink-2); }
+.tag.primera { background:rgba(16,124,16,.12); color:#0d6a0d; border-color:rgba(16,124,16,.3); }
+:root[data-theme="dark"] .tag.primera { background:rgba(80,200,120,.16); color:#7fd69a; }
+.feed .it.abierta { background:linear-gradient(90deg, rgba(16,124,16,.05), transparent 40%); }
+.feed .it .prod { font-size:11px; font-weight:700; letter-spacing:.03em; color:var(--muted); }
+.feed .it .tn small { display:block; font-size:10px; font-weight:600; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.05em; line-height:1; margin-top:2px; }
+.camion .pesada { display:block; margin-top:5px; font-size:12px; color:var(--ink-2); }
+.camion .pesada b { color:var(--ink); font-variant-numeric:tabular-nums; }
 .pz { font:inherit; font-size:13px; font-weight:600; color:var(--ink-2);
       background:var(--surface); border:1px solid var(--border); border-radius:999px;
       padding:7px 15px; cursor:pointer; }
@@ -398,7 +423,7 @@ td .recorta.media  { max-width:146px; }
 
     <div class="hero-grid">
       <div class="tile hero">
-        <div class="k">Mineral acarreado</div>
+        <div class="k">Acarreo a planta</div>
         <div class="v" id="kTon">—<span class="u">t</span></div>
         <div class="n" id="kFecha">—</div>
       </div>
@@ -423,7 +448,7 @@ td .recorta.media  { max-width:146px; }
 
     <div class="card" style="margin-top:16px">
       <h2>Toneladas por procedencia</h2>
-      <p class="sub" id="subProc">Solo mineral. Realito suma Cooperativa y Ejido Algarrobal.</p>
+      <p class="sub" id="subProc">Solo lo que va a planta: mineral y jal. Realito suma Cooperativa y Ejido Algarrobal.</p>
       <div class="barras" id="barras"></div>
     </div>
 
@@ -435,7 +460,7 @@ td .recorta.media  { max-width:146px; }
 
     <div class="card">
       <h2>Ritmo por hora</h2>
-      <p class="sub">Toneladas de mineral cerradas en cada hora del día.</p>
+      <p class="sub">Toneladas a planta cerradas en cada hora del día.</p>
       <svg class="horas" id="svgHoras" role="img" aria-label="Toneladas por hora"></svg>
       <p class="sub" id="notaHueco" style="margin:10px 0 0"></p>
     </div>
@@ -452,27 +477,18 @@ td .recorta.media  { max-width:146px; }
   </section>
 
   <!-- ================= HISTORICO ================= -->
-  <section id="p-historico" class="oculto">
-    <div class="controles-hist">
-      <div class="grupo-ctl">
-        <span class="et-ctl">Qué</span>
-        <div class="periodos">
-          <button class="pz" data-bloque="planta"    aria-pressed="true">Planta</button>
-          <button class="pz" data-bloque="no_planta" aria-pressed="false">No planta</button>
-        </div>
+    <section id="p-historico" class="oculto">
+    <div class="segmentadores" id="hSeg">
+      <div class="seg">
+        <span class="seg-t">Qué</span>
+        <div class="seg-v" id="segBloque"></div>
       </div>
-      <div class="grupo-ctl">
-        <span class="et-ctl">Nivel</span>
-        <div class="periodos">
-          <button class="pz" data-nivel="anio"   aria-pressed="false">Año</button>
-          <button class="pz" data-nivel="mes"    aria-pressed="true">Mes</button>
-          <button class="pz" data-nivel="semana" aria-pressed="false">Semana</button>
-          <button class="pz" data-nivel="dia"    aria-pressed="false">Día</button>
-        </div>
-      </div>
+      <div class="seg"><span class="seg-t">Año</span>    <div class="seg-v" id="segAnio"></div></div>
+      <div class="seg"><span class="seg-t">Mes</span>    <div class="seg-v" id="segMes"></div></div>
+      <div class="seg"><span class="seg-t">Semana</span> <div class="seg-v" id="segSemana"></div></div>
+      <div class="seg"><span class="seg-t">Día</span>    <div class="seg-v" id="segDia"></div></div>
+      <button class="limpiar" id="hLimpiar">Limpiar todo</button>
     </div>
-
-    <nav class="migas" id="hMigas" aria-label="Dónde estás"></nav>
 
     <div class="hero-grid">
       <div class="tile hero">
@@ -508,7 +524,7 @@ td .recorta.media  { max-width:146px; }
 
     <div class="card">
       <h2 id="hTitTabla">Desglose</h2>
-      <p class="sub" id="hSubTabla">Haz clic en un renglón para bajar un nivel.</p>
+      <p class="sub" id="hSubTabla">—</p>
       <div class="tabla-caja">
         <table id="tHist"><thead id="tHistHead"></thead><tbody id="tHistBody"></tbody></table>
       </div>
@@ -638,7 +654,7 @@ function fijarColores(){
   S.dia.forEach(r=>r.grupo&&vistas.add(r.grupo));
   S.detalle.forEach(r=>r.grupo&&vistas.add(r.grupo));
   let i=0;
-  [...vistas].sort().forEach(g=>{ if(esMineral(g)) S.colores[g]=`var(${SERIES[i++ % SERIES.length]})`; });
+  [...vistas].sort().forEach(g=>{ if(!NO_MINERAL.includes(String(g||'').toUpperCase())) S.colores[g]=`var(${SERIES[i++ % SERIES.length]})`; });
 }
 const colorDe = g => S.colores[g] || "var(--muted)";
 
@@ -732,12 +748,36 @@ function intervaloTipico(regs){
   return Math.round(d[Math.floor(d.length/2)]);
 }
 
+/* Cada uso REAL de la bascula es un evento: la primera pesada (cuando el
+   camion entra) y la segunda (cuando sale). Antes el pulso solo miraba
+   boletos cerrados, asi que un camion que acababa de entrar no contaba y
+   el tablero decia DETENIDA con la bascula trabajando. */
+function eventosBascula(){
+  const ev=[];
+  S.dia.forEach(r=>{
+    if(r.entrada) ev.push({t:r.entrada, tipo:"primera", cerrado:!!r.salida, r});
+    if(r.salida)  ev.push({t:r.salida,  tipo:"segunda", cerrado:true,        r});
+  });
+  (S.patio||[]).forEach(c=>{
+    if(c.entrada) ev.push({t:c.entrada, tipo:"primera", cerrado:false, enPatio:true, r:c});
+  });
+  return ev.sort((a,b)=>String(a.t).localeCompare(String(b.t)));
+}
+
+function intervaloEventos(ev){
+  const ts=ev.map(e=>new Date(e.t)).filter(d=>!isNaN(d)).sort((a,b)=>a-b);
+  if(ts.length<3) return null;
+  const d=[]; for(let i=1;i<ts.length;i++) d.push((ts[i]-ts[i-1])/60000);
+  d.sort((a,b)=>a-b);
+  return Math.max(1, Math.round(d[Math.floor(d.length/2)]));
+}
+
 function pintarPulso(){
   const caja=$("#pulso");
-  const regs=S.dia.filter(r=>r.salida||r.entrada);
+  const ev=eventosBascula();
   caja.classList.remove("activa","lenta","parada","sindato");
 
-  if(!regs.length){
+  if(!ev.length){
     caja.classList.add("sindato");
     $("#pEstado").textContent="SIN MOVIMIENTO";
     $("#pCuando").textContent="No hay pesadas registradas este día.";
@@ -745,10 +785,9 @@ function pintarPulso(){
     return;
   }
 
-  const ult=regs.slice().sort((a,b)=>
-    String(b.salida||b.entrada).localeCompare(String(a.salida||a.entrada)))[0];
-  const min=minsDesde(ult.salida||ult.entrada);
-  const tip=intervaloTipico(regs);
+  const ult=ev[ev.length-1];
+  const min=minsDesde(ult.t);
+  const tip=intervaloEventos(ev);
 
   const uLenta  = tip ? Math.max(PULSO_MIN_LENTA,  Math.round(tip*PULSO_LENTA))  : PULSO_MIN_LENTA;
   const uParada = tip ? Math.max(PULSO_MIN_PARADA, Math.round(tip*PULSO_PARADA)) : PULSO_MIN_PARADA;
@@ -760,44 +799,94 @@ function pintarPulso(){
   else                     { caja.classList.add("parada");  estado="DETENIDA"; }
 
   $("#pEstado").textContent=estado;
-  $("#pCuando").textContent="Última pesada "+hace(min);
-  $("#pRitmo").textContent = tip
-    ? "Hoy viene pesando cada "+tip+" min en promedio."
-    : "";
+  const queFue = ult.tipo==="primera"
+      ? (ult.enPatio ? "Primera pesada (sigue en patio)" : "Primera pesada")
+      : "Pesada cerrada";
+  $("#pCuando").textContent = queFue+" "+hace(min);
 
-  const esMin=esMineral(ult.grupo);
-  $("#pUltima").innerHTML =
-    `<b>${nTon(ult.neto)} t</b>Boleto ${nNum(ult.boleto)} · ${esc(ult.procedencia||"—")}`
-    + (esMin ? "" : ' <span class="tag otro">no mineral</span>');
+  /* La nota explica POR QUE esta en ese estado, en vez de soltar un
+     numero suelto que no le dice nada a nadie. */
+  if(tip && min!=null){
+    $("#pRitmo").textContent = (min < uLenta)
+      ? `Hoy la báscula se usa cada ${tip} min más o menos. Va en ritmo.`
+      : `Hoy la báscula se usa cada ${tip} min más o menos, y lleva ${hace(min).replace("hace ","")} sin usarse.`;
+  } else $("#pRitmo").textContent="";
+
+  const r=ult.r;
+  const esPlanta = productoEsPlanta(r.producto, r.grupo);
+  if(ult.tipo==="primera" && !ult.cerrado){
+    const pe = r.peso_entrada!=null ? r.peso_entrada : r.bruto;
+    $("#pUltima").innerHTML =
+      (pe!=null ? `<b>${nTon(pe)} t</b>` : `<b>—</b>`)
+      + `Boleto ${nNum(r.boleto)} · ${esc(r.procedencia||"—")}`
+      + ` <span class="tag primera">1ª pesada</span>`
+      + (esPlanta ? "" : ' <span class="tag otro">no planta</span>');
+  } else {
+    $("#pUltima").innerHTML =
+      `<b>${nTon(r.neto)} t</b>Boleto ${nNum(r.boleto)} · ${esc(r.procedencia||"—")}`
+      + (esPlanta ? "" : ' <span class="tag otro">no planta</span>');
+  }
+}
+
+/* La clasificacion ahora la decide el PRODUCTO, igual que en el historico.
+   Antes era una lista de procedencias escrita a mano, y eso hacia que Hoy
+   y el Historico pudieran dar numeros distintos: dos pestanas peleadas
+   entre si es peor que un numero malo. */
+const PROD_PLANTA = /^(MINERAL|JAL)/i;
+function productoEsPlanta(producto, grupo){
+  if(producto) return PROD_PLANTA.test(String(producto).trim());
+  return esMineral(grupo);          // sin producto, el criterio viejo
 }
 
 function pintarFeed(){
-  const regs=S.dia.filter(r=>r.salida||r.entrada)
-    .sort((a,b)=>String(b.salida||b.entrada).localeCompare(String(a.salida||a.entrada)))
-    .slice(0,FEED_N);
+  /* Un renglon por BOLETO, no por pesada: el cerrado se muestra con su
+     pesada de salida y el que sigue en patio con su primera. Mostrar las
+     dos pesadas del mismo boleto se veia como si estuviera repetido. */
+  const items=[];
+  S.dia.forEach(r=>{ const t=r.salida||r.entrada; if(t) items.push({t, abierta:false, r}); });
+  (S.patio||[]).forEach(c=>{ if(c.entrada) items.push({t:c.entrada, abierta:true, r:c}); });
+  items.sort((a,b)=>String(b.t).localeCompare(String(a.t)));
+  const ev=items.slice(0,FEED_N);
+
   const primeraVez = S.vistos===null;
   if(primeraVez) S.vistos=new Set();
 
-  $("#feed").innerHTML = regs.map(r=>{
-    const nuevo = !primeraVez && !S.vistos.has(r.boleto);
-    const esMin = esMineral(r.grupo);
-    return `<div class="it${nuevo?" nuevo":""}">
-      <span class="hr">${hhmm(r.salida||r.entrada)}</span>
-      <span class="qn"><span class="chip" style="background:${esMin?colorDe(r.grupo):"var(--muted)"}"></span>
-        ${esc(r.procedencia||"—")} <em>· ${esc(r.placas||"—")} · ${esc(r.chofer||"—")}</em></span>
-      <span class="tn">${nTon(r.neto)} t</span>
-      <span class="hace">${hace(minsDesde(r.salida||r.entrada))}</span>
+  $("#feed").innerHTML = ev.map(e=>{
+    const r=e.r, clave=r.boleto+"|"+(e.abierta?"1":"2");
+    const nuevo = !primeraVez && !S.vistos.has(clave);
+    const planta = productoEsPlanta(r.producto, r.grupo);
+    const peso = e.abierta ? (r.peso_entrada!=null?r.peso_entrada:r.bruto) : r.neto;
+
+    const det=["Boleto "+nNum(r.boleto)];
+    if(r.placas) det.push(esc(r.placas));
+    if(r.chofer) det.push(esc(r.chofer));
+    if(e.abierta){
+      det.push("falta la pesada de salida");
+    } else {
+      if(r.bruto!=null && r.tara!=null) det.push(`bruto ${nTon(r.bruto)} − tara ${nTon(r.tara)}`);
+      if(r.minutos_bascula!=null) det.push(r.minutos_bascula+" min en báscula");
+    }
+
+    return `<div class="it${nuevo?" nuevo":""}${e.abierta?" abierta":""}">
+      <span class="hr">${hhmm(e.t)}</span>
+      <span class="qn">
+        <span class="chip" style="background:${planta?colorDe(r.grupo):"var(--muted)"}"></span>
+        ${esc(r.procedencia||"—")}${r.producto?` <span class="prod">${esc(r.producto)}</span>`:""}
+        ${e.abierta?'<span class="tag primera">1ª pesada · en patio</span>':""}
+        <em>${det.join(" · ")}</em></span>
+      <span class="tn">${peso!=null?nTon(peso)+" t":"—"}${e.abierta?'<small>bruto</small>':""}</span>
+      <span class="hace">${hace(minsDesde(e.t))}</span>
     </div>`;
   }).join("");
-  regs.forEach(r=>S.vistos.add(r.boleto));
+  ev.forEach(e=>S.vistos.add(e.r.boleto+"|"+(e.abierta?"1":"2")));
 }
 
 /* ===================================================================
    HOY
    =================================================================== */
 function pintarHoy(){
-  const min = S.dia.filter(r => esMineral(r.grupo));
-  const otr = S.dia.filter(r => !esMineral(r.grupo));
+  const min = S.dia.filter(r =>  productoEsPlanta(r.producto, r.grupo));
+  const otr = S.dia.filter(r => !productoEsPlanta(r.producto, r.grupo));
 
   const kg = min.reduce((a,r)=>a+(r.neto||0),0);
   heroFit($("#kTon"), nTon(kg)+'<span class="u">t</span>');
@@ -825,7 +914,7 @@ function pintarHoy(){
   const cajaO=$("#otros");
   if(otr.length){
     const por={}; otr.forEach(r=>{ const g=(r.grupo||"OTRO"); (por[g]=por[g]||{kg:0,n:0}); por[g].kg+=r.neto||0; por[g].n++; });
-    cajaO.innerHTML = '<span class="et">Fuera del acarreo de mineral</span>' +
+    cajaO.innerHTML = '<span class="et">Fuera de planta</span>' +
       Object.entries(por).sort((a,b)=>b[1].kg-a[1].kg)
         .map(([g,v])=>`<span>${esc(g)} <b>${nTon(v.kg)} t</b> · ${v.n} ${v.n===1?"viaje":"viajes"}</span>`).join("");
     cajaO.style.display="flex";
@@ -860,7 +949,7 @@ function pintarBarras(min){
 
 function dibujarHoras(){
   const svg=$("#svgHoras"); if(!svg) return;
-  const min = S.dia.filter(r=>esMineral(r.grupo));
+  const min = S.dia.filter(r=>productoEsPlanta(r.producto, r.grupo));
   const cubos = new Array(24).fill(0), cuenta = new Array(24).fill(0);
   min.forEach(r=>{ const t=r.salida||r.entrada; if(!t) return;
     const h=new Date(t).getHours(); if(h>=0&&h<24){ cubos[h]+=r.neto||0; cuenta[h]++; } });
@@ -937,41 +1026,44 @@ function pintarPatio(){
     const m=c.minutos_en_patio;
     const cls = m>=PATIO_ALERTA ? "alerta" : m>=PATIO_AVISO ? "aviso" : "";
     const ic  = m>=PATIO_ALERTA ? "▲ " : m>=PATIO_AVISO ? "• " : "";
+    /* Del camion en patio ya se sabe su PRIMERA pesada. Mostrarla es lo
+       util: el neto todavia no existe porque falta la de salida. */
+    const pe = c.peso_entrada!=null ? c.peso_entrada : c.bruto;
     return `<div class="camion ${cls}">
       <div class="pl">${esc(c.placas||"—")}</div>
       <div class="meta">${esc(c.chofer||"sin chofer")}<br>
-        <em>${esc(c.procedencia||"—")} · entró ${hhmm(c.entrada)}</em></div>
+        <em>${esc(c.procedencia||"—")}${c.producto?" · "+esc(c.producto):""}
+        · boleto ${nNum(c.boleto)} · entró ${hhmm(c.entrada)}</em>
+        <span class="pesada">${pe!=null
+          ? `1ª pesada <b>${nTon(pe)} t</b> · falta la de salida`
+          : `1ª pesada sin peso registrado`}</span></div>
       <div class="tiempo">${ic}${m==null?"—":m+" min"}</div>
     </div>`;
   }).join("")+'</div>';
 }
 
 /* ===================================================================
-   HISTORICO  -  navegacion Ano > Mes > Semana > Dia > Procedencia
+   HISTORICO  -  segmentacion de datos
 
-   Dos bloques que nunca se mezclan:
-     PLANTA     = lo que alimenta la planta (mineral y jal)
-     NO PLANTA  = todo lo demas (gravarena, diesel, y lo que llegue)
+   Cuatro filas de botones: Ano, Mes, Semana, Dia. Cada una muestra solo
+   los valores que existen bajo lo ya elegido, y se queda pegada arriba
+   al hacer scroll: se puede cambiar de corte desde cualquier punto de la
+   pagina sin tener que subir.
 
-   La separacion la decide el PRODUCTO, que es como viene en el boleto.
-   El agente ya manda el dia partido asi; si un dia todavia viene con el
-   formato viejo, se deduce por procedencia para no dejar hueco.
+   La tabla muestra el nivel que sigue debajo de lo mas hondo elegido.
+   Sin nada elegido muestra anos; con un mes elegido muestra sus semanas;
+   con un dia elegido muestra sus procedencias.
 
-   La semana va de DOMINGO a SABADO, y siempre se muestra con sus fechas
-   al lado: nadie deberia tener que adivinar de que semana se habla.
+   La semana va de DOMINGO a SABADO, y siempre con sus fechas al lado.
    =================================================================== */
 const MESES_CORTO=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 const MESES_LARGO=["enero","febrero","marzo","abril","mayo","junio","julio",
                    "agosto","septiembre","octubre","noviembre","diciembre"];
 const NIVELES=["anio","mes","semana","dia"];
-const ETIQ_NIVEL={anio:"Año",mes:"Mes",semana:"Semana",dia:"Día"};
+const ETIQ_NIVEL={anio:"Año",mes:"Mes",semana:"Semana",dia:"Día",procedencia:"Procedencia"};
 
 let hBloque="planta";
-let hNivel="mes";
-let hRuta=[];            // [{nivel, clave, etiqueta}] - las migas de pan
-/* Cuando lo que se ve cruza de un ano a otro, las fechas y los numeros de
-   semana se vuelven ambiguos ("Sem 52" no dice de que ano). En ese caso
-   todo se muestra con ano. */
+let hSel={anio:null, mes:null, semana:null, dia:null};
 let hMultiAnio=false;
 
 const dLocal = f => new Date(f+"T12:00:00");
@@ -982,16 +1074,11 @@ const fLargo = f => dLocal(f).toLocaleDateString("es-MX",
 const fCorto = f => { const d=dLocal(f);
   return d.getDate()+"/"+MESES_CORTO[d.getMonth()]+(hMultiAnio?"/"+String(d.getFullYear()).slice(2):""); };
 const fDiaSem= f => { const d=dLocal(f);
-  return ["dom","lun","mar","mié","jue","vie","sáb"][d.getDay()]+" "+d.getDate()+" "+MESES_CORTO[d.getMonth()]
-       + (hMultiAnio?" "+String(d.getFullYear()).slice(2):""); };
-const nombreMes = m => { const [y,mm]=m.split("-"); return MESES_CORTO[+mm-1]+" "+y.slice(2); };
+  return ["dom","lun","mar","mié","jue","vie","sáb"][d.getDay()]+" "+d.getDate()+" "+MESES_CORTO[d.getMonth()]; };
 const nombreMesLargo = m => { const [y,mm]=m.split("-");
   return MESES_LARGO[+mm-1].charAt(0).toUpperCase()+MESES_LARGO[+mm-1].slice(1)+" "+y; };
 
-/* Domingo de la semana a la que pertenece una fecha. */
 function domingoDe(f){ const d=dLocal(f); d.setDate(d.getDate()-d.getDay()); return isoDe(d); }
-/* Numero de semana dentro del ano al que pertenece ese domingo.
-   Semana 1 = la que contiene el 1 de enero. */
 function numSemana(claveDomingo){
   const dom=dLocal(claveDomingo), y=dom.getFullYear();
   const ene1=new Date(y,0,1,12,0,0);
@@ -999,7 +1086,6 @@ function numSemana(claveDomingo){
   return Math.round((dom-dom1)/604800000)+1;
 }
 
-/* Cada dia del resumen, ya partido. Aguanta el formato viejo. */
 function diasResumen(){
   return Object.entries(S.resumen||{})
     .filter(([f,d])=>d && (d.planta||d.no_planta||d.por_grupo))
@@ -1024,28 +1110,102 @@ function diasResumen(){
 
 const bloqueDe = d => hBloque==="planta" ? d.planta : d.otro;
 const gruposDe = d => hBloque==="planta" ? d.gP     : d.gN;
+const claveNivel = (d,n) => n==="anio" ? d.fecha.slice(0,4)
+                          : n==="mes"  ? d.fecha.slice(0,7)
+                          : n==="semana" ? domingoDe(d.fecha) : d.fecha;
 
-/* Se queda solo con los dias que caen dentro de las migas de pan. */
-function filtrar(dias){
-  return dias.filter(d=>hRuta.every(p=>{
-    if(p.nivel==="anio")   return d.fecha.slice(0,4)===p.clave;
-    if(p.nivel==="mes")    return d.fecha.slice(0,7)===p.clave;
-    if(p.nivel==="semana") return domingoDe(d.fecha)===p.clave;
-    return d.fecha===p.clave;
+/* Filtra por los niveles elegidos HASTA el que se pida (sin incluirlo). */
+function filtrar(dias, hasta){
+  const tope = hasta==null ? NIVELES.length : NIVELES.indexOf(hasta);
+  return dias.filter(d=>NIVELES.every((n,i)=>
+    i>=tope || !hSel[n] || claveNivel(d,n)===hSel[n]));
+}
+
+function etiquetaValor(nivel, clave){
+  if(nivel==="anio")   return clave;
+  if(nivel==="mes")    return MESES_CORTO[+clave.slice(5,7)-1];
+  if(nivel==="semana") return "S"+numSemana(clave);
+  return String(dLocal(clave).getDate());
+}
+
+/* Arriba de este tope, la fila se vuelve lista desplegable. Con el ano y
+   el mes sin elegir hay 38 semanas y 60 dias: en botones eso ocupaba mas
+   de un tercio de la pantalla. En cuanto eliges mes, las semanas vuelven a
+   ser cinco botones y se muestran como botones otra vez. */
+const TOPE_BOTONES = 14;
+
+function pintarSegmentadores(todos){
+  const cajas={anio:"#segAnio", mes:"#segMes", semana:"#segSemana", dia:"#segDia"};
+  NIVELES.forEach(n=>{
+    const disponibles=[...new Set(filtrar(todos, n).map(d=>claveNivel(d,n)))].sort();
+    const cont=$(cajas[n]), seg=cont.parentElement;
+    seg.classList.toggle("vacio", disponibles.length<=1 && !hSel[n]);
+
+    if(disponibles.length > TOPE_BOTONES){
+      const et = n==="semana" ? "Todas las semanas"
+               : n==="dia"    ? "Todos los días"
+               : n==="mes"    ? "Todos los meses" : "Todos los años";
+      cont.innerHTML=`<select class="seg-sel" data-n="${n}">
+        <option value="">${et} (${disponibles.length})</option>`
+        + disponibles.map(c=>{
+            const larga = n==="semana" ? "Semana "+numSemana(c)+" · desde "+fCorto(c)
+                        : n==="dia"    ? fDiaSem(c)+(hMultiAnio?" "+c.slice(0,4):"")
+                        : n==="mes"    ? nombreMesLargo(c) : c;
+            return `<option value="${esc(c)}" ${hSel[n]===c?"selected":""}>${esc(larga)}</option>`;
+          }).join("") + `</select>`;
+    } else {
+      cont.innerHTML=disponibles.map(c=>
+        `<button data-n="${n}" data-c="${esc(c)}" aria-pressed="${hSel[n]===c}"
+           title="${esc(n==="semana" ? "Semana "+numSemana(c)+" · inicia "+fCorto(c) : c)}"
+         >${esc(etiquetaValor(n,c))}</button>`).join("");
+    }
+  });
+
+  $$("#hSeg .seg-sel").forEach(sel=>sel.addEventListener("change",()=>{
+    const n=sel.dataset.n;
+    hSel[n]= sel.value || null;
+    NIVELES.slice(NIVELES.indexOf(n)+1).forEach(x=>hSel[x]=null);
+    pintarHistorico();
+  }));
+  $("#segBloque").innerHTML=
+    `<button data-b="planta"    aria-pressed="${hBloque==="planta"}">Planta</button>`+
+    `<button data-b="no_planta" aria-pressed="${hBloque!=="planta"}">No planta</button>`;
+
+  $$("#hSeg .seg-v button[data-n]").forEach(b=>b.addEventListener("click",()=>{
+    const n=b.dataset.n, c=b.dataset.c;
+    hSel[n] = (hSel[n]===c) ? null : c;
+    // al cambiar un nivel, lo de mas abajo deja de tener sentido
+    NIVELES.slice(NIVELES.indexOf(n)+1).forEach(x=>hSel[x]=null);
+    pintarHistorico();
+  }));
+  $$("#hSeg .seg-v button[data-b]").forEach(b=>b.addEventListener("click",()=>{
+    hBloque=b.dataset.b; pintarHistorico();
   }));
 }
 
-/* Agrupa los dias al nivel pedido. El rango que se muestra es SIEMPRE el
-   de los dias realmente contados, asi los renglones suman el total exacto
-   aunque una semana quede cortada por el filtro del mes. */
+/* El nivel que toca mostrar en la tabla es el que sigue DEBAJO del mas
+   hondo que hayas elegido -- no el primero sin elegir. Si eliges una
+   semana directo de la lista, sin pasar por ano ni mes, la tabla debe
+   mostrar los dias de esa semana, no los anos. */
+function nivelTabla(){
+  let hondo=-1;
+  NIVELES.forEach((n,i)=>{ if(hSel[n]) hondo=i; });
+  return hondo+1 < NIVELES.length ? NIVELES[hondo+1] : "procedencia";
+}
+
 function agrupar(dias, nivel){
+  if(nivel==="procedencia"){
+    const m=new Map();
+    dias.forEach(d=>Object.entries(gruposDe(d)).forEach(([g,v])=>{
+      if(!m.has(g)) m.set(g,{clave:g, nivel, kg:0, viajes:0, dias:0,
+                            desde:d.fecha, hasta:d.fecha, grupos:{}, prod:{}});
+      const r=m.get(g); r.kg+=v.kg||0; r.viajes+=v.viajes||0; r.dias++;
+    }));
+    return [...m.values()].sort((a,b)=>b.kg-a.kg);
+  }
   const m=new Map();
   dias.forEach(d=>{
-    let clave;
-    if(nivel==="anio")        clave=d.fecha.slice(0,4);
-    else if(nivel==="mes")    clave=d.fecha.slice(0,7);
-    else if(nivel==="semana") clave=domingoDe(d.fecha);
-    else                      clave=d.fecha;
+    const clave=claveNivel(d,nivel);
     if(!m.has(clave)) m.set(clave,{clave, nivel, kg:0, viajes:0, dias:0,
                                    desde:d.fecha, hasta:d.fecha, grupos:{}, prod:{}});
     const r=m.get(clave), b=bloqueDe(d);
@@ -1058,94 +1218,74 @@ function agrupar(dias, nivel){
       a.kg+=v.kg||0; a.viajes+=v.viajes||0;
     });
     if(d.prod) Object.entries(d.prod).forEach(([p,v])=>{
-      const enBloque = PROD_PLANTA_RE.test(p);
-      if(enBloque !== (hBloque==="planta")) return;
+      if(PROD_PLANTA.test(p) !== (hBloque==="planta")) return;
       const a=r.prod[p]||(r.prod[p]={kg:0,viajes:0});
       a.kg+=v.kg||0; a.viajes+=v.viajes||0;
     });
   });
   return [...m.values()].sort((a,b)=>a.clave.localeCompare(b.clave));
 }
-const PROD_PLANTA_RE=/^(MINERAL|JAL)/i;
 
 function etiquetaFila(r){
   if(r.nivel==="anio")   return r.clave;
   if(r.nivel==="mes")    return nombreMesLargo(r.clave);
   if(r.nivel==="semana") return "Sem "+numSemana(r.clave)
       + (hMultiAnio?"/"+String(dLocal(r.clave).getFullYear()).slice(2):"");
-  return fDiaSem(r.clave);
+  if(r.nivel==="dia")    return fDiaSem(r.clave);
+  return r.clave;
 }
 function rangoFila(r){
-  if(r.nivel==="dia") return "";
-  if(r.desde===r.hasta) return fCorto(r.desde);
-  return fCorto(r.desde)+" – "+fCorto(r.hasta);
+  if(r.nivel==="dia"||r.nivel==="procedencia") return "";
+  return r.desde===r.hasta ? fCorto(r.desde) : fCorto(r.desde)+" – "+fCorto(r.hasta);
 }
-
-/* ---- migas de pan ---- */
-function pintarMigas(){
-  const c=$("#hMigas");
-  let h=`<button data-i="-1">Todo</button>`;
-  hRuta.forEach((p,i)=>{
-    h+=`<span class="sep">›</span>`;
-    h+= i===hRuta.length-1 ? `<span class="aqui">${esc(p.etiqueta)}</span>`
-                           : `<button data-i="${i}">${esc(p.etiqueta)}</button>`;
-  });
-  c.innerHTML=h;
-  c.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
-    const i=+b.dataset.i;
-    hRuta=i<0?[]:hRuta.slice(0,i+1);
-    hNivel=NIVELES[Math.min(hRuta.length, NIVELES.length-1)];
-    sincronizarChips(); pintarHistorico();
-  }));
-}
-function sincronizarChips(){
-  $$("#p-historico [data-nivel]").forEach(b=>
-    b.setAttribute("aria-pressed", b.dataset.nivel===hNivel?"true":"false"));
-  $$("#p-historico [data-bloque]").forEach(b=>
-    b.setAttribute("aria-pressed", b.dataset.bloque===hBloque?"true":"false"));
+function rutaTexto(){
+  const p=[];
+  if(hSel.anio) p.push(hSel.anio);
+  if(hSel.mes) p.push(nombreMesLargo(hSel.mes).split(" ")[0]);
+  if(hSel.semana) p.push("Sem "+numSemana(hSel.semana));
+  if(hSel.dia) p.push(fDiaSem(hSel.dia));
+  return p.length?p.join(" › "):"todo el histórico";
 }
 
 function pintarHistorico(){
   const todos=diasResumen();
   fijarColores();
-  sincronizarChips();
-  pintarMigas();
 
-  const vacio = !todos.length;
-  const dias = vacio?[]:filtrar(todos);
+  const dias = filtrar(todos, null);
   hMultiAnio = dias.length>1 && dias[0].fecha.slice(0,4)!==dias[dias.length-1].fecha.slice(0,4);
-  const filas= agrupar(dias, hNivel);
+  pintarSegmentadores(todos);
 
-  const kg=filas.reduce((a,r)=>a+r.kg,0);
-  const vj=filas.reduce((a,r)=>a+r.viajes,0);
+  const nivel=nivelTabla();
+  const filas=agrupar(dias, nivel);
+  const kg=dias.reduce((a,d)=>a+bloqueDe(d).kg,0);
+  const vj=dias.reduce((a,d)=>a+bloqueDe(d).viajes,0);
   const nDias=dias.filter(d=>bloqueDe(d).kg>0).length;
-  const esPlanta = hBloque==="planta";
+  const esPlanta=hBloque==="planta";
 
   $("#hTituloTon").textContent = esPlanta?"Acarreo a planta":"Fuera de planta";
   $("#hTituloOtro").textContent= esPlanta?"Fuera de planta":"Acarreo a planta";
-  heroFit($("#hTon"), (vacio?"—":nTon(kg))+'<span class="u">t</span>');
+  heroFit($("#hTon"), (dias.length?nTon(kg):"—")+'<span class="u">t</span>');
   $("#hRango").textContent = dias.length
     ? (dias[0].fecha===dias[dias.length-1].fecha ? fLargo(dias[0].fecha)
        : fLargo(dias[0].fecha)+" a "+fLargo(dias[dias.length-1].fecha))
     : "Todavía no hay días guardados.";
-  $("#hViajes").textContent = vacio?"—":nNum(vj);
+  $("#hViajes").textContent = dias.length?nNum(vj):"—";
   $("#hDias").textContent   = nDias+" "+(nDias===1?"día con acarreo":"días con acarreo");
   $("#hProm").innerHTML=(nDias?nTon(kg/nDias):"—")+'<span class="u">t</span>';
   const mejor=filas.slice().sort((a,b)=>b.kg-a.kg)[0];
   $("#hMejor").textContent = mejor&&mejor.kg
-    ? "Mayor "+ETIQ_NIVEL[hNivel].toLowerCase()+": "+nTon(mejor.kg)+" t · "+etiquetaFila(mejor) : "—";
+    ? "Mayor "+ETIQ_NIVEL[nivel].toLowerCase()+": "+nTon(mejor.kg)+" t · "+etiquetaFila(mejor) : "—";
 
-  // el otro bloque, sobre el mismo filtro
   const otroKg=dias.reduce((a,d)=>a+(esPlanta?d.otro.kg:d.planta.kg),0);
   const otroVj=dias.reduce((a,d)=>a+(esPlanta?d.otro.viajes:d.planta.viajes),0);
   heroFit($("#hOtroTon"), (otroKg?nTon(otroKg):"—")+'<span class="u">t</span>');
   $("#hOtroSub").textContent = otroVj? otroVj+" "+(otroVj===1?"viaje":"viajes")+" · no suma aquí" : "—";
 
-  // desglose por producto del bloque
   const prod={};
-  filas.forEach(r=>Object.entries(r.prod).forEach(([p,v])=>{
-    const a=prod[p]||(prod[p]={kg:0,viajes:0}); a.kg+=v.kg; a.viajes+=v.viajes; }));
-  const cp=$("#hProductos"); const keys=Object.keys(prod).sort();
+  dias.forEach(d=>{ if(d.prod) Object.entries(d.prod).forEach(([p,v])=>{
+    if(PROD_PLANTA.test(p)!==esPlanta) return;
+    const a=prod[p]||(prod[p]={kg:0,viajes:0}); a.kg+=v.kg||0; a.viajes+=v.viajes||0; }); });
+  const cp=$("#hProductos"), keys=Object.keys(prod).sort();
   if(keys.length){
     cp.innerHTML='<span class="et">Por producto</span>'+keys.map(p=>
       `<span><b>${esc(p)}</b> ${nTon(prod[p].kg)} t · ${prod[p].viajes} ${prod[p].viajes===1?"viaje":"viajes"}</span>`).join("");
@@ -1157,22 +1297,23 @@ function pintarHistorico(){
   if(viejos){
     if(!aviso){ aviso=document.createElement("p"); aviso.id="hAvisoViejo";
       aviso.className="avisoviejo"; $("#hProductos").insertAdjacentElement("afterend",aviso); }
-    aviso.textContent=`${viejos} ${viejos===1?"día":"días"} de este rango todavía vienen con el corte viejo `
-      +`(separado por procedencia, no por producto). Se corrigen solos cuando báscula los vuelva a leer.`;
+    aviso.textContent=`${viejos} ${viejos===1?"día":"días"} de este corte traen todavía el formato viejo `
+      +`(separado por procedencia, no por producto).`;
     aviso.style.display="block";
   } else if(aviso) aviso.style.display="none";
 
-  $("#hTitGraf").textContent = (esPlanta?"Planta":"No planta")+" por "+ETIQ_NIVEL[hNivel].toLowerCase();
+  $("#hTitGraf").textContent=(esPlanta?"Planta":"No planta")+" por "+ETIQ_NIVEL[nivel].toLowerCase();
   $("#hSubDia").textContent = filas.length
-    ? `${filas.length} ${filas.length===1?"renglón":"renglones"} en este nivel.`
-      + (hNivel!=="dia" ? " Haz clic en una barra o en un renglón para bajar." : "")
+    ? `${rutaTexto()} · ${filas.length} ${filas.length===1?"renglón":"renglones"}`
     : "Sin datos en este corte.";
-  graficaNivel(filas);
-  tablaHistorico(filas, dias);
+  $("#hSubTabla").textContent = nivel==="procedencia"
+    ? "Último nivel: las procedencias de ese día."
+    : "Usa los botones de arriba para cambiar de corte. Se quedan a la vista al bajar.";
+  graficaNivel(filas, nivel);
+  tablaHistorico(filas, nivel);
 }
 
-/* ---- barras apiladas por procedencia, al nivel que se este viendo ---- */
-function graficaNivel(filas){
+function graficaNivel(filas, nivel){
   const svg=$("#gNivel");
   if(!filas.length){ svg.innerHTML=""; $("#hLeyenda").innerHTML=""; return; }
   const W=Math.max(320, svg.clientWidth||900), alto=filas.length>60?210:250;
@@ -1181,7 +1322,7 @@ function graficaNivel(filas){
   const paso=iw/filas.length, ancho=Math.max(2, Math.min(38, paso*0.68));
   const y=v=>mT+ih-(v/max)*ih;
   const grupos=[...new Set(filas.flatMap(r=>Object.keys(r.grupos)))].sort();
-  const apilar = filas.length<=60 && grupos.length>1;
+  const apilar = nivel!=="procedencia" && filas.length<=60 && grupos.length>1;
 
   let g="";
   for(let i=0;i<=3;i++){ const v=max*i/3, yy=y(v);
@@ -1192,26 +1333,26 @@ function graficaNivel(filas){
   const cada=Math.ceil(filas.length/12);
   filas.forEach((r,i)=>{
     const cx=mL+paso*i+paso/2;
-    g+=`<g class="col" data-c="${esc(r.clave)}" data-t="${(r.kg/1000).toFixed(3)}" data-v="${r.viajes}" data-e="${esc(etiquetaFila(r))}">`;
+    g+=`<g class="col" data-c="${esc(r.clave)}">`;
     if(r.kg>0){
       if(apilar){
         let acum=0;
-        grupos.forEach(gr=>{
-          const v=(r.grupos[gr]||{}).kg||0; if(!v) return;
+        grupos.forEach(gr=>{ const v=(r.grupos[gr]||{}).kg||0; if(!v) return;
           const y1=y(acum+v), y2=y(acum);
           g+=`<rect x="${cx-ancho/2}" y="${y1}" width="${ancho}" height="${Math.max(1,y2-y1)}" fill="${colorDe(gr)}"/>`;
-          acum+=v;
-        });
+          acum+=v; });
       } else {
         const yy=y(r.kg);
-        g+=`<rect class="d" x="${cx-ancho/2}" y="${yy}" width="${ancho}" height="${Math.max(2,mT+ih-yy)}"/>`;
+        const col = nivel==="procedencia" ? colorDe(r.clave) : null;
+        g+=`<rect class="${col?"":"d"}" ${col?`fill="${col}"`:""} x="${cx-ancho/2}" y="${yy}" width="${ancho}" height="${Math.max(2,mT+ih-yy)}"/>`;
       }
     }
     g+=`<rect class="hit" x="${cx-paso/2}" y="${mT}" width="${paso}" height="${ih}"/>`;
     if(i%cada===0){
-      const et = r.nivel==="dia" ? fCorto(r.clave)
-               : r.nivel==="semana" ? "S"+numSemana(r.clave)+(hMultiAnio?"/"+String(dLocal(r.clave).getFullYear()).slice(2):"")
-               : r.nivel==="mes" ? MESES_CORTO[+r.clave.slice(5,7)-1] : r.clave;
+      const et = nivel==="dia" ? fCorto(r.clave)
+               : nivel==="semana" ? "S"+numSemana(r.clave)
+               : nivel==="mes" ? MESES_CORTO[+r.clave.slice(5,7)-1]
+               : nivel==="procedencia" ? String(r.clave).slice(0,10) : r.clave;
       g+=`<text x="${cx}" y="${alto-12}" text-anchor="middle">${esc(et)}</text>`;
     }
     g+=`</g>`;
@@ -1219,35 +1360,33 @@ function graficaNivel(filas){
   svg.setAttribute("viewBox",`0 0 ${W} ${alto}`); svg.style.height=alto+"px";
   svg.innerHTML=g+`<text x="${mL-7}" y="${mT-5}" text-anchor="end">t</text>`;
 
-  svg.querySelectorAll("g.col").forEach(c=>{
-    c.style.cursor = hNivel==="dia" ? "default" : "pointer";
-    c.addEventListener("click",()=>{ if(hNivel!=="dia") bajarA(c.dataset.c, c.dataset.e); });
-  });
+  if(nivel!=="procedencia"){
+    svg.querySelectorAll("g.col").forEach(c=>{
+      c.style.cursor="pointer";
+      c.addEventListener("click",()=>{ hSel[nivel]=c.dataset.c;
+        NIVELES.slice(NIVELES.indexOf(nivel)+1).forEach(x=>hSel[x]=null);
+        pintarHistorico(); });
+    });
+  }
   $("#hLeyenda").innerHTML = apilar
     ? grupos.map(gr=>`<span><span class="chip" style="background:${colorDe(gr)}"></span>${esc(gr)}</span>`).join("")
     : "";
 }
 
-function bajarA(clave, etiqueta){
-  hRuta.push({nivel:hNivel, clave, etiqueta});
-  hNivel = NIVELES[Math.min(NIVELES.indexOf(hNivel)+1, NIVELES.length-1)];
-  pintarHistorico();
-}
-
-function tablaHistorico(filas, dias){
-  const grupos=[...new Set(filas.flatMap(r=>Object.keys(r.grupos)))].sort();
+function tablaHistorico(filas, nivel){
+  const porProc = nivel==="procedencia";
+  const grupos = porProc ? [] : [...new Set(filas.flatMap(r=>Object.keys(r.grupos)))].sort();
   const hayRango = filas.some(r=>rangoFila(r));
-  $("#tTitulo");
-  $("#tHistHead").innerHTML=`<tr><th>#</th><th>${ETIQ_NIVEL[hNivel]}</th>`
+  $("#tHistHead").innerHTML=`<tr><th>#</th><th>${ETIQ_NIVEL[nivel]}</th>`
     + (hayRango?`<th>Fechas</th>`:``)
     + `<th class="num">Viajes</th>`
     + grupos.map(g=>`<th class="num">${esc(g)}</th>`).join("")
     + `<th class="num">Total t</th></tr>`;
 
-  const TOPE=120;
-  const enPantalla=filas.slice(0,TOPE);
+  const TOPE=120, enPantalla=filas.slice(0,TOPE);
+  const bajable = !porProc;
   $("#tHistBody").innerHTML=enPantalla.map((r,i)=>
-    `<tr class="${hNivel!=="dia"?"baja":""}" data-c="${esc(r.clave)}" data-e="${esc(etiquetaFila(r))}">
+    `<tr class="${bajable?"baja":""}" data-c="${esc(r.clave)}">
        <td class="num">${i+1}</td>
        <td>${esc(etiquetaFila(r))}</td>`
     + (hayRango?`<td>${esc(rangoFila(r))}</td>`:``)
@@ -1255,27 +1394,25 @@ function tablaHistorico(filas, dias){
     + grupos.map(g=>`<td class="num">${r.grupos[g]?nTon(r.grupos[g].kg):"—"}</td>`).join("")
     + `<td class="num"><b>${r.kg?nTon(r.kg):"—"}</b></td></tr>`).join("");
 
-  if(hNivel!=="dia"){
-    $$("#tHistBody tr.baja").forEach(tr=>tr.addEventListener("click",()=>
-      bajarA(tr.dataset.c, tr.dataset.e)));
+  if(bajable){
+    $$("#tHistBody tr.baja").forEach(tr=>tr.addEventListener("click",()=>{
+      hSel[nivel]=tr.dataset.c;
+      NIVELES.slice(NIVELES.indexOf(nivel)+1).forEach(x=>hSel[x]=null);
+      pintarHistorico();
+      $("#hSeg").scrollIntoView({block:"start", behavior:"smooth"});
+    }));
   }
   const kg=filas.reduce((a,r)=>a+r.kg,0);
   $("#hPieN").textContent = filas.length+" "+(filas.length===1?"renglón":"renglones")
     + (filas.length>TOPE ? " · en pantalla los primeros "+TOPE+", el CSV trae todos" : "")
     + " · " + (hBloque==="planta"?"planta":"no planta");
   $("#hPieT").textContent=nTon(kg)+" t";
-  S.histCsv={grupos, filas, nivel:hNivel, bloque:hBloque};
+  S.histCsv={grupos, filas, nivel, bloque:hBloque};
 }
 
-$$("#p-historico [data-nivel]").forEach(b=>b.addEventListener("click",()=>{
-  hNivel=b.dataset.nivel;
-  const i=NIVELES.indexOf(hNivel);
-  hRuta=hRuta.slice(0, i);        // no se puede estar mas hondo que el nivel
-  pintarHistorico();
-}));
-$$("#p-historico [data-bloque]").forEach(b=>b.addEventListener("click",()=>{
-  hBloque=b.dataset.bloque; pintarHistorico();
-}));
+$("#hLimpiar").addEventListener("click",()=>{
+  NIVELES.forEach(n=>hSel[n]=null); pintarHistorico();
+});
 
 $("#hCsv").addEventListener("click",()=>{
   if(!S.histCsv) return;
@@ -1290,6 +1427,7 @@ $("#hCsv").addEventListener("click",()=>{
   a.href=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}));
   a.download=`flash_acarreo_${bloque}_${nivel}.csv`; a.click(); URL.revokeObjectURL(a.href);
 });
+
 /* ===================================================================
    DETALLE
    =================================================================== */
@@ -1336,7 +1474,7 @@ function pintarTabla(){
     x=String(x||"");y=String(y||""); return o.asc?x.localeCompare(y):y.localeCompare(x); });
 
   $("#tbody").innerHTML = f.length ? f.map(r=>{
-    const mineral = esMineral(r.grupo);
+    const mineral = productoEsPlanta(r.producto, r.grupo);
     const al = (r.alertas||[]).length ? ` title="${esc((r.alertas||[]).join(', '))}"` : "";
     return `<tr${al}>
       <td class="num">${nNum(r.boleto)}${(r.alertas||[]).length?' <span class="alerta-dato">!</span>':''}</td>
@@ -1354,8 +1492,8 @@ function pintarTabla(){
       <td class="num"><b>${nNum(r.neto)}</b></td></tr>`;
   }).join("") : `<tr><td colspan="11"><div class="vacio">Nada con esos filtros.</div></td></tr>`;
 
-  const kgMin=f.filter(r=>esMineral(r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
-  const kgOtr=f.filter(r=>!esMineral(r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
+  const kgMin=f.filter(r=> productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
+  const kgOtr=f.filter(r=>!productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
   $("#pieN").textContent = f.length+" "+(f.length===1?"pesada":"pesadas")
     + (kgOtr? " · además "+nTon(kgOtr)+" t fuera del acarreo de mineral" : "");
   $("#pieT").textContent = nTon(kgMin)+" t de mineral";
@@ -1422,6 +1560,16 @@ setInterval(()=>{ if(!$("#p-hoy").classList.contains("oculto")){ pintarPulso(); 
 addEventListener("resize", ()=>{ clearTimeout(window._rz);
   window._rz=setTimeout(()=>{ dibujarHoras();
     if(!$("#p-historico").classList.contains("oculto")) pintarHistorico(); }, 180); });
+
+/* El encabezado se envuelve en pantallas angostas, asi que su alto cambia.
+   Se mide y se guarda, para que los segmentadores se peguen justo debajo
+   y no queden tapados ni flotando. */
+function medirEncabezado(){
+  const h=document.querySelector("header");
+  if(h) document.documentElement.style.setProperty("--hh", h.offsetHeight+"px");
+}
+medirEncabezado();
+window.addEventListener("resize", medirEncabezado);
 </script>
 </body>
 </html>
