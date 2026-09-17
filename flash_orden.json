@@ -1,0 +1,8 @@
+{
+  "_nota": "Canal de mando por internet. El agente lee este archivo cada 3 minutos.",
+  "id": "normal-internet-1",
+  "carga_dias": 0,
+  "config": {
+    "dias_hacia_atras": 2
+  }
+}
