@@ -36,7 +36,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "3.7"
+VERSION = "3.8"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -87,6 +87,11 @@ TAM_MAX_AGENTE = 2 * 1024 * 1024
 #                                   config.json, y nunca viaja por un canal
 #                                   que otros puedan leer
 NO_REMOTO = ("carpeta_dropbox", "orden_url", "firebase_auth")
+
+# Productos que van a la planta. Todo lo demas cae en el bloque de no-planta.
+# Se comparan sin acentos ni signos y por prefijo, asi que "JAL", "JALES" y
+# "Jal de presa" caen todos en planta.
+PRODUCTOS_PLANTA = ("mineral", "jal")
 
 MESES = {
     "ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
@@ -943,6 +948,60 @@ def escribir_estado(estado):
         log("No se pudo escribir el estado en Dropbox: %s" % e, "WARN")
 
 
+def es_planta(producto):
+    """Lo que va a la planta se decide por PRODUCTO, no por procedencia.
+
+    Antes el visor separaba con una lista de procedencias escrita a mano
+    ('GRAVARENA', 'DIESEL'). Funcionaba de casualidad, porque esas dos son
+    su propia procedencia. El dia que llegue gravarena facturada a nombre
+    de una empresa real, se contaria como mineral y nadie se enteraria.
+
+    Con el producto eso no pasa: mineral y jal van a planta, y CUALQUIER
+    otra cosa -- incluida una que todavia no existe -- cae al bloque de
+    no-planta con su nombre a la vista, nunca se traga en silencio.
+    """
+    p = _clave(producto or "")
+    return any(p.startswith(x) for x in PRODUCTOS_PLANTA)
+
+
+def _acumular(dest, llave, registro):
+    a = dest.setdefault(llave or "SIN DATO", {"viajes": 0, "kg": 0})
+    a["viajes"] += 1
+    a["kg"] += (registro.get("neto") or 0)
+
+
+def armar_resumen(fecha_k, registros):
+    """El resumen del dia, ya desglosado para que el visor no tenga que
+    bajarse los boletos de todo el ano para separar planta de no-planta."""
+    planta = [r for r in registros if es_planta(r.get("producto"))]
+    otros = [r for r in registros if not es_planta(r.get("producto"))]
+
+    por_grupo, por_producto = {}, {}
+    planta_grupo, otros_grupo = {}, {}
+    for r in registros:
+        _acumular(por_grupo, r.get("grupo") or "SIN PROCEDENCIA", r)
+        _acumular(por_producto, (r.get("producto") or "SIN PRODUCTO").upper(), r)
+    for r in planta:
+        _acumular(planta_grupo, r.get("grupo") or "SIN PROCEDENCIA", r)
+    for r in otros:
+        _acumular(otros_grupo, r.get("grupo") or "SIN PROCEDENCIA", r)
+
+    kg = lambda lista: sum(x.get("neto") or 0 for x in lista)
+    return {
+        "fecha": fecha_k,
+        "viajes": len(registros),
+        "kg": kg(registros),
+        "toneladas": round(kg(registros) / 1000.0, 3),
+        "planta": {"viajes": len(planta), "kg": kg(planta)},
+        "no_planta": {"viajes": len(otros), "kg": kg(otros)},
+        "por_producto": por_producto,
+        "planta_por_grupo": planta_grupo,
+        "no_planta_por_grupo": otros_grupo,
+        "por_grupo": por_grupo,          # se conserva: el visor viejo lo usa
+        "actualizado": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
 def rango_dia(fecha):
     d = fecha.strftime("%Y-%m-%d")
     return "%s 00:00" % d, "%s 23:59" % d
@@ -1029,20 +1088,7 @@ def main():
             })
 
         if registros:
-            por_grupo = {}
-            for r in registros:
-                g = r.get("grupo") or "SIN PROCEDENCIA"
-                a = por_grupo.setdefault(g, {"viajes": 0, "kg": 0})
-                a["viajes"] += 1
-                a["kg"] += (r.get("neto") or 0)
-            resumen = {
-                "fecha": fecha_k,
-                "viajes": len(registros),
-                "kg": sum(r.get("neto") or 0 for r in registros),
-                "toneladas": round(sum(r.get("neto") or 0 for r in registros) / 1000.0, 3),
-                "por_grupo": por_grupo,
-                "actualizado": datetime.now().isoformat(timespec="seconds"),
-            }
+            resumen = armar_resumen(fecha_k, registros)
             enviar("resumen/%s" % fecha_k, resumen)
             if fecha_k == hoy.strftime("%Y-%m-%d"):
                 resumen_dia = resumen

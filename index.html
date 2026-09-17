@@ -150,7 +150,8 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .tile .v { font-size:30px; font-weight:700; letter-spacing:-.02em; line-height:1.05; }
 .tile .u { font-size:15px; font-weight:600; color:var(--ink-2); margin-left:3px; }
 .tile .n { font-size:13px; color:var(--muted); margin-top:7px; }
-.tile.hero .v { font-size:46px; }
+.tile.hero .v { font-size:clamp(26px, 3.4vw, 46px); white-space:nowrap; }
+.tile.hero .v.largo { font-size:clamp(22px, 2.5vw, 34px); }
 
 .otros { margin-top:14px; padding:12px 16px; border:1px dashed var(--axis);
          border-radius:10px; font-size:13px; color:var(--ink-2);
@@ -257,6 +258,55 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .vacio { text-align:center; padding:44px 20px; color:var(--muted); }
 .vacio .big { font-size:17px; font-weight:600; color:var(--ink-2); margin-bottom:6px; }
 
+/* ---------- periodo (pildoras, estilo MRT) ---------- */
+.periodos { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:18px; }
+.controles-hist { display:flex; gap:22px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px; }
+.grupo-ctl { display:flex; flex-direction:column; gap:5px; }
+.et-ctl { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.controles-hist .periodos { margin-bottom:0; }
+.migas { display:flex; align-items:center; gap:2px; flex-wrap:wrap; margin-bottom:18px;
+  font-size:13px; color:var(--ink-2); min-height:26px; }
+.migas button { font:inherit; font-weight:600; color:var(--gold-ink); background:none;
+  border:none; padding:4px 7px; border-radius:7px; cursor:pointer; }
+.migas button:hover { background:var(--plane); }
+.migas .sep { color:var(--muted); padding:0 1px; user-select:none; }
+.migas .aqui { font-weight:700; color:var(--ink); padding:4px 7px; }
+tbody tr.baja { cursor:pointer; }
+tbody tr.baja td:first-child::after { content:" ›"; color:var(--muted); font-weight:700; }
+tbody tr.baja:hover td:first-child::after { color:var(--gold-ink); }
+.avisoviejo { margin:0 0 14px; padding:10px 14px; border-radius:10px; font-size:12.5px;
+  background:var(--plane); border:1px dashed var(--axis); color:var(--ink-2); }
+.pz { font:inherit; font-size:13px; font-weight:600; color:var(--ink-2);
+      background:var(--surface); border:1px solid var(--border); border-radius:999px;
+      padding:7px 15px; cursor:pointer; }
+.pz:hover { border-color:var(--gold); color:var(--gold-ink); }
+.pz[aria-pressed="true"] { background:var(--gold-dark); border-color:var(--gold-dark); color:#fff; }
+:root[data-theme="dark"] .pz[aria-pressed="true"] { background:var(--gold); border-color:var(--gold); color:#1a1a19; }
+@media (prefers-color-scheme: dark){ :root:where(:not([data-theme="light"])) .pz[aria-pressed="true"]{
+  background:var(--gold); border-color:var(--gold); color:#1a1a19; } }
+
+.delta { font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:4px; }
+.delta.sube  { color:var(--good); }
+.delta.baja  { color:var(--critical); }
+.delta.igual { color:var(--muted); }
+
+/* ---------- graficas del historico ---------- */
+.gx { width:100%; display:block; }
+.gx .gl { stroke:var(--grid); stroke-width:1; }
+.gx .bl { stroke:var(--axis); stroke-width:1; }
+.gx .prom { stroke:var(--gold); stroke-width:2; stroke-dasharray:5 4; }
+.gx text { fill:var(--muted); font-size:10px; font-family:inherit; }
+.gx .vlab { fill:var(--ink-2); font-size:10px; font-weight:700; }
+.gx .lbl  { fill:var(--ink-2); font-size:11px; font-weight:600; }
+.gx rect.d { fill:var(--seq); rx:2; }
+.gx g.col:hover rect.d { fill:color-mix(in srgb,var(--seq) 75%, var(--ink)); }
+.gx rect.hit { fill:transparent; cursor:pointer; }
+.gx rect.seg { cursor:pointer; }
+.gx g.fila:hover rect.seg { opacity:.82; }
+
+.leyenda { display:flex; gap:16px; flex-wrap:wrap; margin:14px 0 2px; font-size:12.5px; color:var(--ink-2); }
+.leyenda span { display:inline-flex; align-items:center; gap:7px; }
+
 /* ---------- filtros y tabla ---------- */
 .filtros { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:18px; }
 .campo { display:flex; flex-direction:column; gap:5px; }
@@ -321,6 +371,7 @@ td .recorta.media  { max-width:146px; }
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="true"  data-t="hoy">Hoy</button>
       <button class="tab" role="tab" aria-selected="false" data-t="patio">En patio<span class="badge" id="bPatio">0</span></button>
+        <button class="tab" role="tab" aria-selected="false" data-t="historico">Histórico</button>
       <button class="tab" role="tab" aria-selected="false" data-t="detalle">Detalle</button>
     </nav>
     <div class="spacer"></div>
@@ -397,6 +448,75 @@ td .recorta.media  { max-width:146px; }
       <h2>Camiones en patio ahora</h2>
       <p class="sub" id="subPatio">Entraron y todavía no cierran boleto.</p>
       <div id="patio"></div>
+    </div>
+  </section>
+
+  <!-- ================= HISTORICO ================= -->
+  <section id="p-historico" class="oculto">
+    <div class="controles-hist">
+      <div class="grupo-ctl">
+        <span class="et-ctl">Qué</span>
+        <div class="periodos">
+          <button class="pz" data-bloque="planta"    aria-pressed="true">Planta</button>
+          <button class="pz" data-bloque="no_planta" aria-pressed="false">No planta</button>
+        </div>
+      </div>
+      <div class="grupo-ctl">
+        <span class="et-ctl">Nivel</span>
+        <div class="periodos">
+          <button class="pz" data-nivel="anio"   aria-pressed="false">Año</button>
+          <button class="pz" data-nivel="mes"    aria-pressed="true">Mes</button>
+          <button class="pz" data-nivel="semana" aria-pressed="false">Semana</button>
+          <button class="pz" data-nivel="dia"    aria-pressed="false">Día</button>
+        </div>
+      </div>
+    </div>
+
+    <nav class="migas" id="hMigas" aria-label="Dónde estás"></nav>
+
+    <div class="hero-grid">
+      <div class="tile hero">
+        <div class="k" id="hTituloTon">Acarreo a planta</div>
+        <div class="v" id="hTon">—<span class="u">t</span></div>
+        <div class="n" id="hRango">—</div>
+      </div>
+      <div class="tile">
+        <div class="k">Viajes</div>
+        <div class="v" id="hViajes">—</div>
+        <div class="n" id="hDias">—</div>
+      </div>
+      <div class="tile">
+        <div class="k">Promedio diario</div>
+        <div class="v" id="hProm">—<span class="u">t</span></div>
+        <div class="n" id="hMejor">—</div>
+      </div>
+      <div class="tile">
+        <div class="k" id="hTituloOtro">Fuera de planta</div>
+        <div class="v" id="hOtroTon">—<span class="u">t</span></div>
+        <div class="n" id="hOtroSub">—</div>
+      </div>
+    </div>
+
+    <div class="otros" id="hProductos"></div>
+
+    <div class="card" style="margin-top:16px">
+      <h2 id="hTitGraf">Toneladas por periodo</h2>
+      <p class="sub" id="hSubDia">—</p>
+      <svg class="gx" id="gNivel" role="img" aria-label="Toneladas por periodo y procedencia"></svg>
+      <div class="leyenda" id="hLeyenda"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="hTitTabla">Desglose</h2>
+      <p class="sub" id="hSubTabla">Haz clic en un renglón para bajar un nivel.</p>
+      <div class="tabla-caja">
+        <table id="tHist"><thead id="tHistHead"></thead><tbody id="tHistBody"></tbody></table>
+      </div>
+      <div class="resumen-tabla">
+        <span id="hPieN">—</span>
+        <strong id="hPieT">—</strong>
+      </div>
+      <div style="margin-top:14px"><button class="btn" id="hCsv">Descargar CSV</button></div>
     </div>
   </section>
 
@@ -488,6 +608,8 @@ const hhmm = s => { if(!s) return "—"; const d=new Date(s); return isNaN(d)?"�
   String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
 const fechaCorta = s => { if(!s) return ""; const d=new Date(s); return isNaN(d)?"":
   String(d.getDate()).padStart(2,"0")+"/"+["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][d.getMonth()]; };
+const heroFit = (el, txt) => { el.innerHTML=txt;
+  el.classList.toggle("largo", (el.textContent||"").replace(/[^0-9]/g,"").length > 6); };
 const esc  = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const esMineral = g => !NO_MINERAL.includes(String(g||"").toUpperCase());
 
@@ -550,8 +672,9 @@ const colorDe = g => S.colores[g] || "var(--muted)";
    =================================================================== */
 $$(".tab").forEach(b => b.addEventListener("click", ()=>{
   $$(".tab").forEach(x => x.setAttribute("aria-selected", x===b ? "true":"false"));
-  ["hoy","patio","detalle"].forEach(t => $("#p-"+t).classList.toggle("oculto", t!==b.dataset.t));
+  ["hoy","patio","historico","detalle"].forEach(t => $("#p-"+t).classList.toggle("oculto", t!==b.dataset.t));
   if(b.dataset.t==="detalle") cargarDetalle();
+  if(b.dataset.t==="historico") pintarHistorico();
   if(b.dataset.t==="hoy") dibujarHoras();
 }));
 
@@ -677,7 +800,7 @@ function pintarHoy(){
   const otr = S.dia.filter(r => !esMineral(r.grupo));
 
   const kg = min.reduce((a,r)=>a+(r.neto||0),0);
-  $("#kTon").innerHTML = nTon(kg)+'<span class="u">t</span>';
+  heroFit($("#kTon"), nTon(kg)+'<span class="u">t</span>');
   $("#kViajes").textContent = min.length || "0";
 
   const f = new Date(S.fecha+"T12:00:00");
@@ -824,6 +947,350 @@ function pintarPatio(){
 }
 
 /* ===================================================================
+   HISTORICO  -  navegacion Ano > Mes > Semana > Dia > Procedencia
+
+   Dos bloques que nunca se mezclan:
+     PLANTA     = lo que alimenta la planta (mineral y jal)
+     NO PLANTA  = todo lo demas (gravarena, diesel, y lo que llegue)
+
+   La separacion la decide el PRODUCTO, que es como viene en el boleto.
+   El agente ya manda el dia partido asi; si un dia todavia viene con el
+   formato viejo, se deduce por procedencia para no dejar hueco.
+
+   La semana va de DOMINGO a SABADO, y siempre se muestra con sus fechas
+   al lado: nadie deberia tener que adivinar de que semana se habla.
+   =================================================================== */
+const MESES_CORTO=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const MESES_LARGO=["enero","febrero","marzo","abril","mayo","junio","julio",
+                   "agosto","septiembre","octubre","noviembre","diciembre"];
+const NIVELES=["anio","mes","semana","dia"];
+const ETIQ_NIVEL={anio:"Año",mes:"Mes",semana:"Semana",dia:"Día"};
+
+let hBloque="planta";
+let hNivel="mes";
+let hRuta=[];            // [{nivel, clave, etiqueta}] - las migas de pan
+/* Cuando lo que se ve cruza de un ano a otro, las fechas y los numeros de
+   semana se vuelven ambiguos ("Sem 52" no dice de que ano). En ese caso
+   todo se muestra con ano. */
+let hMultiAnio=false;
+
+const dLocal = f => new Date(f+"T12:00:00");
+const isoDe  = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")
+                    +"-"+String(d.getDate()).padStart(2,"0");
+const fLargo = f => dLocal(f).toLocaleDateString("es-MX",
+  hMultiAnio ? {day:"numeric",month:"long",year:"numeric"} : {day:"numeric",month:"long"});
+const fCorto = f => { const d=dLocal(f);
+  return d.getDate()+"/"+MESES_CORTO[d.getMonth()]+(hMultiAnio?"/"+String(d.getFullYear()).slice(2):""); };
+const fDiaSem= f => { const d=dLocal(f);
+  return ["dom","lun","mar","mié","jue","vie","sáb"][d.getDay()]+" "+d.getDate()+" "+MESES_CORTO[d.getMonth()]
+       + (hMultiAnio?" "+String(d.getFullYear()).slice(2):""); };
+const nombreMes = m => { const [y,mm]=m.split("-"); return MESES_CORTO[+mm-1]+" "+y.slice(2); };
+const nombreMesLargo = m => { const [y,mm]=m.split("-");
+  return MESES_LARGO[+mm-1].charAt(0).toUpperCase()+MESES_LARGO[+mm-1].slice(1)+" "+y; };
+
+/* Domingo de la semana a la que pertenece una fecha. */
+function domingoDe(f){ const d=dLocal(f); d.setDate(d.getDate()-d.getDay()); return isoDe(d); }
+/* Numero de semana dentro del ano al que pertenece ese domingo.
+   Semana 1 = la que contiene el 1 de enero. */
+function numSemana(claveDomingo){
+  const dom=dLocal(claveDomingo), y=dom.getFullYear();
+  const ene1=new Date(y,0,1,12,0,0);
+  const dom1=new Date(ene1); dom1.setDate(dom1.getDate()-dom1.getDay());
+  return Math.round((dom-dom1)/604800000)+1;
+}
+
+/* Cada dia del resumen, ya partido. Aguanta el formato viejo. */
+function diasResumen(){
+  return Object.entries(S.resumen||{})
+    .filter(([f,d])=>d && (d.planta||d.no_planta||d.por_grupo))
+    .map(([f,d])=>{
+      const nuevo = !!(d.planta||d.no_planta);
+      let planta,otro,gP,gN;
+      if(nuevo){
+        planta={kg:(d.planta||{}).kg||0, viajes:(d.planta||{}).viajes||0};
+        otro  ={kg:(d.no_planta||{}).kg||0, viajes:(d.no_planta||{}).viajes||0};
+        gP=d.planta_por_grupo||{}; gN=d.no_planta_por_grupo||{};
+      }else{
+        planta={kg:0,viajes:0}; otro={kg:0,viajes:0}; gP={}; gN={};
+        Object.entries(d.por_grupo||{}).forEach(([g,v])=>{
+          if(esMineral(g)){ planta.kg+=v.kg||0; planta.viajes+=v.viajes||0; gP[g]=v; }
+          else            { otro.kg  +=v.kg||0; otro.viajes  +=v.viajes||0; gN[g]=v; }
+        });
+      }
+      return {fecha:f, nuevo, planta, otro, gP, gN, prod:d.por_producto||null};
+    })
+    .sort((a,b)=>a.fecha.localeCompare(b.fecha));
+}
+
+const bloqueDe = d => hBloque==="planta" ? d.planta : d.otro;
+const gruposDe = d => hBloque==="planta" ? d.gP     : d.gN;
+
+/* Se queda solo con los dias que caen dentro de las migas de pan. */
+function filtrar(dias){
+  return dias.filter(d=>hRuta.every(p=>{
+    if(p.nivel==="anio")   return d.fecha.slice(0,4)===p.clave;
+    if(p.nivel==="mes")    return d.fecha.slice(0,7)===p.clave;
+    if(p.nivel==="semana") return domingoDe(d.fecha)===p.clave;
+    return d.fecha===p.clave;
+  }));
+}
+
+/* Agrupa los dias al nivel pedido. El rango que se muestra es SIEMPRE el
+   de los dias realmente contados, asi los renglones suman el total exacto
+   aunque una semana quede cortada por el filtro del mes. */
+function agrupar(dias, nivel){
+  const m=new Map();
+  dias.forEach(d=>{
+    let clave;
+    if(nivel==="anio")        clave=d.fecha.slice(0,4);
+    else if(nivel==="mes")    clave=d.fecha.slice(0,7);
+    else if(nivel==="semana") clave=domingoDe(d.fecha);
+    else                      clave=d.fecha;
+    if(!m.has(clave)) m.set(clave,{clave, nivel, kg:0, viajes:0, dias:0,
+                                   desde:d.fecha, hasta:d.fecha, grupos:{}, prod:{}});
+    const r=m.get(clave), b=bloqueDe(d);
+    r.kg+=b.kg; r.viajes+=b.viajes;
+    if(b.kg>0) r.dias++;
+    if(d.fecha<r.desde) r.desde=d.fecha;
+    if(d.fecha>r.hasta) r.hasta=d.fecha;
+    Object.entries(gruposDe(d)).forEach(([g,v])=>{
+      const a=r.grupos[g]||(r.grupos[g]={kg:0,viajes:0});
+      a.kg+=v.kg||0; a.viajes+=v.viajes||0;
+    });
+    if(d.prod) Object.entries(d.prod).forEach(([p,v])=>{
+      const enBloque = PROD_PLANTA_RE.test(p);
+      if(enBloque !== (hBloque==="planta")) return;
+      const a=r.prod[p]||(r.prod[p]={kg:0,viajes:0});
+      a.kg+=v.kg||0; a.viajes+=v.viajes||0;
+    });
+  });
+  return [...m.values()].sort((a,b)=>a.clave.localeCompare(b.clave));
+}
+const PROD_PLANTA_RE=/^(MINERAL|JAL)/i;
+
+function etiquetaFila(r){
+  if(r.nivel==="anio")   return r.clave;
+  if(r.nivel==="mes")    return nombreMesLargo(r.clave);
+  if(r.nivel==="semana") return "Sem "+numSemana(r.clave)
+      + (hMultiAnio?"/"+String(dLocal(r.clave).getFullYear()).slice(2):"");
+  return fDiaSem(r.clave);
+}
+function rangoFila(r){
+  if(r.nivel==="dia") return "";
+  if(r.desde===r.hasta) return fCorto(r.desde);
+  return fCorto(r.desde)+" – "+fCorto(r.hasta);
+}
+
+/* ---- migas de pan ---- */
+function pintarMigas(){
+  const c=$("#hMigas");
+  let h=`<button data-i="-1">Todo</button>`;
+  hRuta.forEach((p,i)=>{
+    h+=`<span class="sep">›</span>`;
+    h+= i===hRuta.length-1 ? `<span class="aqui">${esc(p.etiqueta)}</span>`
+                           : `<button data-i="${i}">${esc(p.etiqueta)}</button>`;
+  });
+  c.innerHTML=h;
+  c.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    const i=+b.dataset.i;
+    hRuta=i<0?[]:hRuta.slice(0,i+1);
+    hNivel=NIVELES[Math.min(hRuta.length, NIVELES.length-1)];
+    sincronizarChips(); pintarHistorico();
+  }));
+}
+function sincronizarChips(){
+  $$("#p-historico [data-nivel]").forEach(b=>
+    b.setAttribute("aria-pressed", b.dataset.nivel===hNivel?"true":"false"));
+  $$("#p-historico [data-bloque]").forEach(b=>
+    b.setAttribute("aria-pressed", b.dataset.bloque===hBloque?"true":"false"));
+}
+
+function pintarHistorico(){
+  const todos=diasResumen();
+  fijarColores();
+  sincronizarChips();
+  pintarMigas();
+
+  const vacio = !todos.length;
+  const dias = vacio?[]:filtrar(todos);
+  hMultiAnio = dias.length>1 && dias[0].fecha.slice(0,4)!==dias[dias.length-1].fecha.slice(0,4);
+  const filas= agrupar(dias, hNivel);
+
+  const kg=filas.reduce((a,r)=>a+r.kg,0);
+  const vj=filas.reduce((a,r)=>a+r.viajes,0);
+  const nDias=dias.filter(d=>bloqueDe(d).kg>0).length;
+  const esPlanta = hBloque==="planta";
+
+  $("#hTituloTon").textContent = esPlanta?"Acarreo a planta":"Fuera de planta";
+  $("#hTituloOtro").textContent= esPlanta?"Fuera de planta":"Acarreo a planta";
+  heroFit($("#hTon"), (vacio?"—":nTon(kg))+'<span class="u">t</span>');
+  $("#hRango").textContent = dias.length
+    ? (dias[0].fecha===dias[dias.length-1].fecha ? fLargo(dias[0].fecha)
+       : fLargo(dias[0].fecha)+" a "+fLargo(dias[dias.length-1].fecha))
+    : "Todavía no hay días guardados.";
+  $("#hViajes").textContent = vacio?"—":nNum(vj);
+  $("#hDias").textContent   = nDias+" "+(nDias===1?"día con acarreo":"días con acarreo");
+  $("#hProm").innerHTML=(nDias?nTon(kg/nDias):"—")+'<span class="u">t</span>';
+  const mejor=filas.slice().sort((a,b)=>b.kg-a.kg)[0];
+  $("#hMejor").textContent = mejor&&mejor.kg
+    ? "Mayor "+ETIQ_NIVEL[hNivel].toLowerCase()+": "+nTon(mejor.kg)+" t · "+etiquetaFila(mejor) : "—";
+
+  // el otro bloque, sobre el mismo filtro
+  const otroKg=dias.reduce((a,d)=>a+(esPlanta?d.otro.kg:d.planta.kg),0);
+  const otroVj=dias.reduce((a,d)=>a+(esPlanta?d.otro.viajes:d.planta.viajes),0);
+  heroFit($("#hOtroTon"), (otroKg?nTon(otroKg):"—")+'<span class="u">t</span>');
+  $("#hOtroSub").textContent = otroVj? otroVj+" "+(otroVj===1?"viaje":"viajes")+" · no suma aquí" : "—";
+
+  // desglose por producto del bloque
+  const prod={};
+  filas.forEach(r=>Object.entries(r.prod).forEach(([p,v])=>{
+    const a=prod[p]||(prod[p]={kg:0,viajes:0}); a.kg+=v.kg; a.viajes+=v.viajes; }));
+  const cp=$("#hProductos"); const keys=Object.keys(prod).sort();
+  if(keys.length){
+    cp.innerHTML='<span class="et">Por producto</span>'+keys.map(p=>
+      `<span><b>${esc(p)}</b> ${nTon(prod[p].kg)} t · ${prod[p].viajes} ${prod[p].viajes===1?"viaje":"viajes"}</span>`).join("");
+    cp.style.display="flex";
+  } else cp.style.display="none";
+
+  const viejos=dias.filter(d=>!d.nuevo).length;
+  let aviso=$("#hAvisoViejo");
+  if(viejos){
+    if(!aviso){ aviso=document.createElement("p"); aviso.id="hAvisoViejo";
+      aviso.className="avisoviejo"; $("#hProductos").insertAdjacentElement("afterend",aviso); }
+    aviso.textContent=`${viejos} ${viejos===1?"día":"días"} de este rango todavía vienen con el corte viejo `
+      +`(separado por procedencia, no por producto). Se corrigen solos cuando báscula los vuelva a leer.`;
+    aviso.style.display="block";
+  } else if(aviso) aviso.style.display="none";
+
+  $("#hTitGraf").textContent = (esPlanta?"Planta":"No planta")+" por "+ETIQ_NIVEL[hNivel].toLowerCase();
+  $("#hSubDia").textContent = filas.length
+    ? `${filas.length} ${filas.length===1?"renglón":"renglones"} en este nivel.`
+      + (hNivel!=="dia" ? " Haz clic en una barra o en un renglón para bajar." : "")
+    : "Sin datos en este corte.";
+  graficaNivel(filas);
+  tablaHistorico(filas, dias);
+}
+
+/* ---- barras apiladas por procedencia, al nivel que se este viendo ---- */
+function graficaNivel(filas){
+  const svg=$("#gNivel");
+  if(!filas.length){ svg.innerHTML=""; $("#hLeyenda").innerHTML=""; return; }
+  const W=Math.max(320, svg.clientWidth||900), alto=filas.length>60?210:250;
+  const mL=48,mR=12,mT=18,mB=34, iw=W-mL-mR, ih=alto-mT-mB;
+  const max=Math.max(...filas.map(r=>r.kg))||1;
+  const paso=iw/filas.length, ancho=Math.max(2, Math.min(38, paso*0.68));
+  const y=v=>mT+ih-(v/max)*ih;
+  const grupos=[...new Set(filas.flatMap(r=>Object.keys(r.grupos)))].sort();
+  const apilar = filas.length<=60 && grupos.length>1;
+
+  let g="";
+  for(let i=0;i<=3;i++){ const v=max*i/3, yy=y(v);
+    g+=`<line class="gl" x1="${mL}" y1="${yy}" x2="${W-mR}" y2="${yy}"/>`;
+    g+=`<text x="${mL-7}" y="${yy+3}" text-anchor="end">${(v/1000).toFixed(0)}</text>`; }
+  g+=`<line class="bl" x1="${mL}" y1="${mT+ih}" x2="${W-mR}" y2="${mT+ih}"/>`;
+
+  const cada=Math.ceil(filas.length/12);
+  filas.forEach((r,i)=>{
+    const cx=mL+paso*i+paso/2;
+    g+=`<g class="col" data-c="${esc(r.clave)}" data-t="${(r.kg/1000).toFixed(3)}" data-v="${r.viajes}" data-e="${esc(etiquetaFila(r))}">`;
+    if(r.kg>0){
+      if(apilar){
+        let acum=0;
+        grupos.forEach(gr=>{
+          const v=(r.grupos[gr]||{}).kg||0; if(!v) return;
+          const y1=y(acum+v), y2=y(acum);
+          g+=`<rect x="${cx-ancho/2}" y="${y1}" width="${ancho}" height="${Math.max(1,y2-y1)}" fill="${colorDe(gr)}"/>`;
+          acum+=v;
+        });
+      } else {
+        const yy=y(r.kg);
+        g+=`<rect class="d" x="${cx-ancho/2}" y="${yy}" width="${ancho}" height="${Math.max(2,mT+ih-yy)}"/>`;
+      }
+    }
+    g+=`<rect class="hit" x="${cx-paso/2}" y="${mT}" width="${paso}" height="${ih}"/>`;
+    if(i%cada===0){
+      const et = r.nivel==="dia" ? fCorto(r.clave)
+               : r.nivel==="semana" ? "S"+numSemana(r.clave)+(hMultiAnio?"/"+String(dLocal(r.clave).getFullYear()).slice(2):"")
+               : r.nivel==="mes" ? MESES_CORTO[+r.clave.slice(5,7)-1] : r.clave;
+      g+=`<text x="${cx}" y="${alto-12}" text-anchor="middle">${esc(et)}</text>`;
+    }
+    g+=`</g>`;
+  });
+  svg.setAttribute("viewBox",`0 0 ${W} ${alto}`); svg.style.height=alto+"px";
+  svg.innerHTML=g+`<text x="${mL-7}" y="${mT-5}" text-anchor="end">t</text>`;
+
+  svg.querySelectorAll("g.col").forEach(c=>{
+    c.style.cursor = hNivel==="dia" ? "default" : "pointer";
+    c.addEventListener("click",()=>{ if(hNivel!=="dia") bajarA(c.dataset.c, c.dataset.e); });
+  });
+  $("#hLeyenda").innerHTML = apilar
+    ? grupos.map(gr=>`<span><span class="chip" style="background:${colorDe(gr)}"></span>${esc(gr)}</span>`).join("")
+    : "";
+}
+
+function bajarA(clave, etiqueta){
+  hRuta.push({nivel:hNivel, clave, etiqueta});
+  hNivel = NIVELES[Math.min(NIVELES.indexOf(hNivel)+1, NIVELES.length-1)];
+  pintarHistorico();
+}
+
+function tablaHistorico(filas, dias){
+  const grupos=[...new Set(filas.flatMap(r=>Object.keys(r.grupos)))].sort();
+  const hayRango = filas.some(r=>rangoFila(r));
+  $("#tTitulo");
+  $("#tHistHead").innerHTML=`<tr><th>#</th><th>${ETIQ_NIVEL[hNivel]}</th>`
+    + (hayRango?`<th>Fechas</th>`:``)
+    + `<th class="num">Viajes</th>`
+    + grupos.map(g=>`<th class="num">${esc(g)}</th>`).join("")
+    + `<th class="num">Total t</th></tr>`;
+
+  const TOPE=120;
+  const enPantalla=filas.slice(0,TOPE);
+  $("#tHistBody").innerHTML=enPantalla.map((r,i)=>
+    `<tr class="${hNivel!=="dia"?"baja":""}" data-c="${esc(r.clave)}" data-e="${esc(etiquetaFila(r))}">
+       <td class="num">${i+1}</td>
+       <td>${esc(etiquetaFila(r))}</td>`
+    + (hayRango?`<td>${esc(rangoFila(r))}</td>`:``)
+    + `<td class="num">${r.viajes||"—"}</td>`
+    + grupos.map(g=>`<td class="num">${r.grupos[g]?nTon(r.grupos[g].kg):"—"}</td>`).join("")
+    + `<td class="num"><b>${r.kg?nTon(r.kg):"—"}</b></td></tr>`).join("");
+
+  if(hNivel!=="dia"){
+    $$("#tHistBody tr.baja").forEach(tr=>tr.addEventListener("click",()=>
+      bajarA(tr.dataset.c, tr.dataset.e)));
+  }
+  const kg=filas.reduce((a,r)=>a+r.kg,0);
+  $("#hPieN").textContent = filas.length+" "+(filas.length===1?"renglón":"renglones")
+    + (filas.length>TOPE ? " · en pantalla los primeros "+TOPE+", el CSV trae todos" : "")
+    + " · " + (hBloque==="planta"?"planta":"no planta");
+  $("#hPieT").textContent=nTon(kg)+" t";
+  S.histCsv={grupos, filas, nivel:hNivel, bloque:hBloque};
+}
+
+$$("#p-historico [data-nivel]").forEach(b=>b.addEventListener("click",()=>{
+  hNivel=b.dataset.nivel;
+  const i=NIVELES.indexOf(hNivel);
+  hRuta=hRuta.slice(0, i);        // no se puede estar mas hondo que el nivel
+  pintarHistorico();
+}));
+$$("#p-historico [data-bloque]").forEach(b=>b.addEventListener("click",()=>{
+  hBloque=b.dataset.bloque; pintarHistorico();
+}));
+
+$("#hCsv").addEventListener("click",()=>{
+  if(!S.histCsv) return;
+  const {grupos,filas,nivel,bloque}=S.histCsv;
+  const cab=["#",ETIQ_NIVEL[nivel],"desde","hasta","viajes"]
+    .concat(grupos.map(g=>g+" (kg)")).concat(["total (kg)"]);
+  const csv=[cab.join(",")].concat(filas.map((r,i)=>
+    [i+1,'"'+etiquetaFila(r)+'"',r.desde,r.hasta,r.viajes]
+      .concat(grupos.map(g=>(r.grupos[g]||{}).kg||0))
+      .concat([r.kg]).join(","))).join("\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv;charset=utf-8"}));
+  a.download=`flash_acarreo_${bloque}_${nivel}.csv`; a.click(); URL.revokeObjectURL(a.href);
+});
+/* ===================================================================
    DETALLE
    =================================================================== */
 let cargando=false;
@@ -944,6 +1411,7 @@ async function cargar(){
   if(!$("#fDesde").value){ $("#fDesde").value=S.fecha; $("#fHasta").value=S.fecha; }
 
   sello(); pintarHoy(); pintarPatio();
+  if(!$("#p-historico").classList.contains("oculto")) pintarHistorico();
   if(!$("#p-detalle").classList.contains("oculto")) cargarDetalle();
 }
 
@@ -951,7 +1419,9 @@ cargar();
 setInterval(cargar, REFRESCO_MS);
 setInterval(sello, 20000);
 setInterval(()=>{ if(!$("#p-hoy").classList.contains("oculto")){ pintarPulso(); pintarFeed(); } }, 15000);
-addEventListener("resize", ()=>{ clearTimeout(window._rz); window._rz=setTimeout(dibujarHoras,180); });
+addEventListener("resize", ()=>{ clearTimeout(window._rz);
+  window._rz=setTimeout(()=>{ dibujarHoras();
+    if(!$("#p-historico").classList.contains("oculto")) pintarHistorico(); }, 180); });
 </script>
 </body>
 </html>
