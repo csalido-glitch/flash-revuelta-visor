@@ -2,7 +2,7 @@
 <!-- ====================================================================
      FLASH DE ACARREO - VISOR
      Bascula Cieneguita - Urique, Chihuahua
-     Version V12   (18-sep-2026)
+     Version V13   (18-sep-2026)
      El numero va amarrado a la carpeta de entrega, no a un conteo aparte.
      Al modificar este archivo, sube la version aqui y en VISOR_VERSION.
      ==================================================================== -->
@@ -324,6 +324,27 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .camion.alerta { border-color:color-mix(in srgb,var(--critical) 50%, var(--border)); }
 .camion.alerta .tiempo { color:var(--critical); }
 .camion.aviso  .tiempo { color:var(--serious); }
+
+/* Encabezado de tarjeta con un dato al margen derecho. */
+.cab { display:flex; align-items:flex-start; justify-content:space-between;
+       gap:16px; flex-wrap:wrap; }
+.cab > div:first-child { min-width:0; }
+.dato { text-align:right; white-space:nowrap; }
+.dato .et { display:block; font-size:10.5px; font-weight:700; letter-spacing:.07em;
+            text-transform:uppercase; color:var(--muted); }
+.dato .n  { display:block; font-size:24px; font-weight:700; color:var(--ink);
+            font-variant-numeric:tabular-nums; line-height:1.15; }
+.dato .n small { font-size:13px; font-weight:600; color:var(--ink-2); margin-left:3px; }
+.dato .pie2 { display:block; font-size:11px; color:var(--muted); }
+@media (max-width:560px){
+  /* En celular el dato se va abajo del titulo, alineado a la izquierda y
+     con una linea que lo separa. A la derecha se veia suelto, como si
+     perteneciera a otra cosa. */
+  .cab { flex-direction:column; align-items:stretch; gap:0; }
+  .dato { text-align:left; margin-top:10px; padding-top:10px;
+          border-top:1px solid var(--border); }
+  .dato .n { font-size:20px; }
+}
 /* En celular la tarjeta se acomoda en dos pisos: arriba la hora y los
    minutos, abajo el resto a todo lo ancho. En tres columnas el de en medio
    quedaba tan angosto que cada dato se partia en dos o tres renglones. */
@@ -545,8 +566,13 @@ td .recorta.media  { max-width:146px; }
   <!-- ================= PATIO ================= -->
   <section id="p-patio" class="oculto">
     <div class="card">
-      <h2>Camiones en patio ahora</h2>
-      <p class="sub" id="subPatio">Entraron y todavía no cierran boleto.</p>
+      <div class="cab">
+        <div>
+          <h2>Camiones en patio ahora</h2>
+          <p class="sub" id="subPatio">Entraron y todavía no cierran boleto.</p>
+        </div>
+        <div class="dato" id="promPatio"></div>
+      </div>
       <div id="patio"></div>
     </div>
   </section>
@@ -643,7 +669,7 @@ td .recorta.media  { max-width:146px; }
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V12 · 18-sep-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V13 · 18-sep-2026)</span>
   </p>
 </div>
 
@@ -660,7 +686,7 @@ const DB = "https://flash-revuelta-mrt-csalido-default-rtdb.firebaseio.com";
 // Lo que NO es acarreo de mineral. Se muestra aparte, nunca dentro del total.
 const NO_MINERAL = ["GRAVARENA", "DIESEL"];
 
-const VISOR_VERSION = "12";    // mismo numero que la carpeta de entrega; sale al pie
+const VISOR_VERSION = "13";    // mismo numero que la carpeta de entrega; sale al pie
 const REFRESCO_MS   = 30000;  // cada cuanto relee Firebase
 const FRESCO_MIN    = 10;     // verde  hasta aqui
 const TIBIO_MIN     = 30;     // ambar  hasta aqui, despues rojo
@@ -1171,9 +1197,35 @@ function dibujarHoras(){
 /* ===================================================================
    PATIO
    =================================================================== */
+/* Cuanto tarda un camion de que entra a que sale, hoy.
+   Sale de los boletos YA CERRADOS: el que sigue parado en el patio
+   todavia no tiene un "cuanto tardo", nomas un "cuanto lleva". Por eso
+   el promedio no se mueve porque haya o no camiones dentro en este
+   momento: habla del dia, no del instante. Se borra al cambiar el dia. */
+function pintarPromPatio(){
+  const caja=$("#promPatio"); if(!caja) return;
+  const mins = (S.dia||[]).map(r=>r.minutos_bascula)
+                 .filter(v=>v!=null && !isNaN(v) && v>=0)
+                 .sort((a,b)=>a-b);
+  if(!mins.length){
+    caja.innerHTML=`<span class="et">Promedio de hoy</span>
+      <span class="n">—</span>
+      <span class="pie2">ningún boleto cerrado todavía</span>`;
+    return;
+  }
+  const prom  = Math.round(mins.reduce((a,v)=>a+v,0)/mins.length);
+  const medio = mins.length%2 ? mins[(mins.length-1)/2]
+              : Math.round((mins[mins.length/2-1]+mins[mins.length/2])/2);
+  caja.innerHTML=`<span class="et">Promedio de hoy</span>
+    <span class="n">${prom}<small>min</small></span>
+    <span class="pie2" title="Mediana ${medio} min · el más rápido ${mins[0]} min · el más tardado ${mins[mins.length-1]} min">
+      de entrada a salida · ${mins.length} ${mins.length===1?"camión":"camiones"}</span>`;
+}
+
 function pintarPatio(){
   const caja=$("#patio"), n=S.patio.length;
   $("#bPatio").textContent=n;
+  pintarPromPatio();   // antes de cualquier salida: se pinta aunque el patio este vacio
 
   const viejo = S.salud && S.salud.ultima_corrida &&
     (Date.now()-new Date(S.salud.ultima_corrida).getTime())/60000 > TIBIO_MIN;
