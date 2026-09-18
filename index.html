@@ -232,13 +232,32 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .feed { display:flex; flex-direction:column; gap:2px; }
 .feed .it { display:grid; grid-template-columns:62px 1fr auto auto; gap:14px; align-items:center;
   padding:11px 12px; border-radius:10px; font-size:13px; }
-@media (max-width:620px){ .feed .it { grid-template-columns:54px 1fr auto; }
-  .feed .it .hace { display:none; } }
+/* La rejilla se acomoda a las columnas que quedaron prendidas. */
+.feed.sin-hora .it { grid-template-columns:1fr auto auto; }
+.feed.sin-hace .it { grid-template-columns:62px 1fr auto; }
+.feed.sin-hora.sin-hace .it { grid-template-columns:1fr auto; }
+@media (max-width:620px){
+  .feed .it { grid-template-columns:54px 1fr auto; }
+  .feed .it .hace { display:none; }
+  .feed.sin-hora .it, .feed.sin-hora.sin-hace .it { grid-template-columns:1fr auto; }
+  .feed.sin-hace .it { grid-template-columns:54px 1fr auto; }
+}
 .feed .it + .it { border-top:1px solid var(--grid); }
 .feed .it .hr { font-variant-numeric:tabular-nums; font-weight:700; color:var(--ink); }
 .feed .it .qn { color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
                 display:flex; align-items:center; gap:8px; }
 .feed .it .qn em { font-style:normal; color:var(--muted); }
+/* Va despues de la regla de arriba a proposito: la base de .qn se declara
+   mas abajo que la media query de la rejilla, y por orden le ganaba. */
+@media (max-width:620px){
+  /* En celular el renglon deja de ser una sola linea recortada con puntos
+     suspensivos: el nombre y el detalle se acomodan solos. La pantalla es
+     angosta, el dato no. */
+  .feed .it .qn { display:block; white-space:normal; overflow:visible;
+                  text-overflow:clip; line-height:1.35; }
+  .feed .it .qn .chip { display:inline-block; vertical-align:middle; margin-right:6px; }
+  .feed .it .qn em { display:block; margin-top:1px; }
+}
 .feed .it .tn { font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .feed .it .hace { color:var(--muted); font-variant-numeric:tabular-nums;
                   min-width:76px; text-align:right; }
@@ -283,6 +302,8 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
           background:var(--plane); }
 .camion .pl { font-size:16px; font-weight:700; font-variant-numeric:tabular-nums;
               min-width:64px; }
+.camion .pl small { display:block; font-size:11px; font-weight:600; color:var(--muted);
+              letter-spacing:.04em; text-transform:uppercase; }
 .camion .meta { font-size:13px; color:var(--ink-2); min-width:0; }
 .camion .meta em { font-style:normal; color:var(--muted); }
 .camion .tiempo { font-size:17px; font-weight:700; font-variant-numeric:tabular-nums;
@@ -290,6 +311,20 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .camion.alerta { border-color:color-mix(in srgb,var(--critical) 50%, var(--border)); }
 .camion.alerta .tiempo { color:var(--critical); }
 .camion.aviso  .tiempo { color:var(--serious); }
+
+.casillas { display:flex; flex-wrap:wrap; gap:6px 14px; margin:0 0 14px;
+  padding:10px 12px; border:1px dashed var(--border); border-radius:10px;
+  background:var(--plane); }
+.casillas .casilla { display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+  font-size:12.5px; color:var(--ink-2); user-select:none; white-space:nowrap; }
+.casillas .casilla input { accent-color:var(--gold-dark); width:15px; height:15px; margin:0;
+  cursor:pointer; }
+.casillas .fijas { font-size:12px; color:var(--muted); white-space:nowrap;
+  border-right:1px solid var(--border); padding-right:12px; margin-right:2px; }
+@media (max-width:520px){ .casillas .fijas { border-right:none; width:100%; padding:0 0 2px; } }
+:root[data-theme="dark"] .casillas .casilla input { accent-color:var(--gold); }
+@media (prefers-color-scheme: dark){ :root:where(:not([data-theme="light"])) .casillas .casilla input{
+  accent-color:var(--gold); } }
 
 .vacio { text-align:center; padding:44px 20px; color:var(--muted); }
 .vacio .big { font-size:17px; font-weight:600; color:var(--ink-2); margin-bottom:6px; }
@@ -461,6 +496,7 @@ td .recorta.media  { max-width:146px; }
     <div class="card">
       <h2>Últimas pesadas</h2>
       <p class="sub">Lo más reciente primero. Lo que acaba de entrar se marca en verde.</p>
+      <div class="casillas" id="feedCols"></div>
       <div class="feed" id="feed"></div>
     </div>
 
@@ -547,6 +583,7 @@ td .recorta.media  { max-width:146px; }
     <div class="card">
       <h2>Detalle de pesadas</h2>
       <p class="sub">Los filtros se combinan y el total se recalcula al vuelo.</p>
+      <div class="casillas" id="detCols"></div>
       <div class="filtros">
         <div class="campo"><label for="fDesde">Desde</label><input type="date" id="fDesde"></div>
         <div class="campo"><label for="fHasta">Hasta</label><input type="date" id="fHasta"></div>
@@ -559,19 +596,7 @@ td .recorta.media  { max-width:146px; }
       </div>
       <div class="tabla-caja">
         <table id="tabla">
-          <thead><tr>
-            <th data-s="boleto" class="num">Boleto</th>
-            <th data-s="entrada">Entrada</th>
-            <th data-s="salida">Salida</th>
-            <th data-s="minutos_bascula" class="num">Min</th>
-            <th data-s="placas">Placas</th>
-            <th data-s="chofer">Chofer</th>
-            <th data-s="procedencia">Procedencia</th>
-            <th data-s="producto">Producto</th>
-            <th data-s="bruto" class="num">Bruto</th>
-            <th data-s="tara" class="num">Tara</th>
-            <th data-s="neto" class="num">Neto</th>
-          </tr></thead>
+          <thead id="thead"></thead>
           <tbody id="tbody"></tbody>
         </table>
       </div>
@@ -626,6 +651,9 @@ const hoyISO = () => { const d=new Date();
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const nTon = v => (v==null||isNaN(v)) ? "—" : (v/1000).toLocaleString("es-MX",{minimumFractionDigits:3,maximumFractionDigits:3});
 const nNum = v => (v==null||isNaN(v)) ? "—" : Number(v).toLocaleString("es-MX");
+/* El boleto es un folio, no una cantidad: va sin separador de miles.
+   Venia saliendo "4,404" cuando en el talon dice 4404. */
+const nBoleto = v => (v==null||v==="") ? "—" : String(v);
 const hhmm = s => { if(!s) return "—"; const d=new Date(s); return isNaN(d)?"—":
   String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
 const fechaCorta = s => { if(!s) return ""; const d=new Date(s); return isNaN(d)?"":
@@ -654,15 +682,95 @@ const S = { salud:null, resumen:{}, patio:[], dia:[], fecha:hoyISO(), detalle:[]
    filtrar o cambiar de dia nunca le cambia el color a nadie.
    Lo que no es mineral no recibe color de serie: va en gris, porque
    esta fuera del total. */
+/* Ocho tonos (ya venian validados para contraste y daltonismo) por dos
+   rellenos, solido y rayado: dieciseis identidades distintas.
+
+   Antes se repartian los ocho tonos en orden alfabetico y al llegar al
+   noveno se les daba la vuelta. Como hay trece procedencias de planta,
+   tres pares terminaban del mismo color: EL REALITO y RUBEN CERVANTES
+   salian los dos de rosa. Ahora cada una tiene su lugar fijo en esta
+   lista, asi que su color no depende de cuantas haya ni de lo que este
+   filtrado.
+
+   Las tres primeras son las que casi siempre aparecen juntas, y son el
+   trio que mejor se distingue entre si de toda la paleta.
+
+   PARA DAR DE ALTA UNA PROCEDENCIA NUEVA: escribela en esta lista, en el
+   renglon que le toque. Las que no esten aqui toman los lugares que
+   sobren, en orden alfabetico. */
+const LUGARES = [
+  "EL REALITO",                     /*  1  azul            */
+  "CERRO BLANCO-URIQUE",            /*  2  naranja         */
+  "RUBEN CERVANTES-TEMORIS",        /*  3  aqua            */
+  "MINERAL ARTURO QUEZADA",         /*  4  amarillo        */
+  "SAN LORENZO ING AQ",             /*  5  magenta         */
+  "LA MILLONARIA",                  /*  6  verde           */
+  "TOSTON URIQUE",                  /*  7  violeta         */
+  "EL ROSARIO-URIQUE",              /*  8  rojo            */
+  "VINATITA",                       /*  9  azul rayado     */
+  "SANGRE DE CRISTO - GUAZAPARES",  /* 10  naranja rayado  */
+  "BAHUICHIVO RCM",                 /* 11  aqua rayado     */
+  "TAUNITAS",                       /* 12  amarillo rayado */
+  "SAN FRANCISCO"                   /* 13  magenta rayado  */
+];
+const RANURAS = SERIES.length * 2;
+
 function fijarColores(){
   const vistas=new Set();
   Object.values(S.resumen||{}).forEach(d=>Object.keys(d.por_grupo||{}).forEach(g=>vistas.add(g)));
   S.dia.forEach(r=>r.grupo&&vistas.add(r.grupo));
   S.detalle.forEach(r=>r.grupo&&vistas.add(r.grupo));
-  let i=0;
-  [...vistas].sort().forEach(g=>{ if(!NO_MINERAL.includes(String(g||'').toUpperCase())) S.colores[g]=`var(${SERIES[i++ % SERIES.length]})`; });
+
+  const ocupadas=new Set();
+  const poner=(g,n)=>{ S.colores[g]={tono:SERIES[n%SERIES.length], rayado:n>=SERIES.length};
+                       ocupadas.add(n); };
+
+  LUGARES.forEach((g,n)=>{ if(n<RANURAS) poner(g,n); });
+
+  const libres=[]; for(let n=0;n<RANURAS;n++) if(!ocupadas.has(n)) libres.push(n);
+  [...vistas].filter(g=>!NO_MINERAL.includes(String(g||"").toUpperCase()) && !S.colores[g])
+             .sort()
+             .forEach(g=>{ const n=libres.shift(); if(n!=null) poner(g,n); });
 }
-const colorDe = g => S.colores[g] || "var(--muted)";
+const estiloDe = g => S.colores[g] || null;
+const colorDe  = g => { const e=estiloDe(g); return e ? `var(${e.tono})` : "var(--muted)"; };
+/* Relleno para las barras del SVG: el rayado va por <pattern>. */
+const rellenoSvg = g => { const e=estiloDe(g); if(!e) return "var(--muted)";
+  return e.rayado ? `url(#trama${e.tono.replace("--s","")})` : `var(${e.tono})`; };
+/* Relleno para los cuadritos de HTML, donde no hay <pattern>. */
+const fondoChip = g => { const e=estiloDe(g); if(!e) return "var(--muted)";
+  const c=`var(${e.tono})`;
+  return e.rayado
+    ? `repeating-linear-gradient(45deg, ${c} 0 3px, color-mix(in srgb, ${c} 32%, transparent) 3px 6px)`
+    : c; };
+/* Las tramas que usa el SVG del historico. */
+const TRAMAS_SVG = SERIES.map(t=>
+  `<pattern id="trama${t.replace("--s","")}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+     <rect width="6" height="6" fill="var(${t})" opacity=".32"/><rect width="3" height="6" fill="var(${t})"/>
+   </pattern>`).join("");
+
+/* ---------- casillas para elegir columnas ----------
+   Lo que se prende se guarda en el navegador, igual que el tema. Las
+   columnas fijas no traen casilla: son las que le dan sentido al
+   renglon y no se pueden apagar. */
+function prefsLeer(clave, porDefecto){
+  try{ const v=localStorage.getItem(clave); if(v) return new Set(JSON.parse(v)); }catch(e){}
+  return new Set(porDefecto);
+}
+function prefsGuardar(clave, set){
+  try{ localStorage.setItem(clave, JSON.stringify([...set])); }catch(e){}
+}
+function pintarCasillas(caja, campos, set, clave, alCambiar, fijasTxt){
+  if(!caja) return;
+  caja.innerHTML = (fijasTxt?`<span class="fijas">Siempre a la vista: ${esc(fijasTxt)}</span>`:"")
+    + campos.map(c=>
+    `<label class="casilla"><input type="checkbox" data-k="${c.k}"${set.has(c.k)?" checked":""}>${esc(c.t)}</label>`
+  ).join("");
+  caja.querySelectorAll("input").forEach(i=>i.addEventListener("change",()=>{
+    if(i.checked) set.add(i.dataset.k); else set.delete(i.dataset.k);
+    prefsGuardar(clave,set); alCambiar();
+  }));
+}
 
 /* ===================================================================
    TEMA
@@ -824,12 +932,12 @@ function pintarPulso(){
     const pe = r.peso_entrada!=null ? r.peso_entrada : r.bruto;
     $("#pUltima").innerHTML =
       (pe!=null ? `<b>${nTon(pe)} t</b>` : `<b>—</b>`)
-      + `Boleto ${nNum(r.boleto)} · ${esc(r.procedencia||"—")}`
+      + `Boleto ${nBoleto(r.boleto)} · ${esc(r.procedencia||"—")}`
       + ` <span class="tag primera">1ª pesada</span>`
       + (esPlanta ? "" : ' <span class="tag otro">no planta</span>');
   } else {
     $("#pUltima").innerHTML =
-      `<b>${nTon(r.neto)} t</b>Boleto ${nNum(r.boleto)} · ${esc(r.procedencia||"—")}`
+      `<b>${nTon(r.neto)} t</b>Boleto ${nBoleto(r.boleto)} · ${esc(r.procedencia||"—")}`
       + (esPlanta ? "" : ' <span class="tag otro">no planta</span>');
   }
 }
@@ -843,6 +951,20 @@ function productoEsPlanta(producto, grupo){
   if(producto) return PROD_PLANTA.test(String(producto).trim());
   return esMineral(grupo);          // sin producto, el criterio viejo
 }
+
+/* Procedencia y neto son fijos: sin ellos el renglon no dice nada.
+   Lo de en medio se prende y se apaga. */
+const FEED_CAMPOS = [
+  {k:"hora",     t:"Hora"},
+  {k:"boleto",   t:"Boleto"},
+  {k:"producto", t:"Producto"},
+  {k:"chofer",   t:"Chofer"},
+  {k:"placas",   t:"Placas"},
+  {k:"pesadas",  t:"Bruto y tara"},
+  {k:"min",      t:"Min en báscula"},
+  {k:"hace",     t:"Hace cuánto"}
+];
+const FEED_SET = prefsLeer("flash-feed-cols", ["hora","boleto","producto","chofer","hace"]);
 
 function pintarFeed(){
   /* Un renglon por BOLETO, no por pesada: el cerrado se muestra con su
@@ -862,28 +984,34 @@ function pintarFeed(){
     const nuevo = !primeraVez && !S.vistos.has(clave);
     const planta = productoEsPlanta(r.producto, r.grupo);
     const peso = e.abierta ? (r.peso_entrada!=null?r.peso_entrada:r.bruto) : r.neto;
+    const ver = k => FEED_SET.has(k);
 
-    const det=["Boleto "+nNum(r.boleto)];
-    if(r.placas) det.push(esc(r.placas));
-    if(r.chofer) det.push(esc(r.chofer));
+    const det=[];
+    if(ver("boleto")) det.push("Boleto "+nBoleto(r.boleto));
+    if(ver("placas") && r.placas) det.push(esc(r.placas));
+    if(ver("chofer") && r.chofer) det.push(esc(r.chofer));
     if(e.abierta){
       det.push("falta la pesada de salida");
     } else {
-      if(r.bruto!=null && r.tara!=null) det.push(`bruto ${nTon(r.bruto)} − tara ${nTon(r.tara)}`);
-      if(r.minutos_bascula!=null) det.push(r.minutos_bascula+" min en báscula");
+      if(ver("pesadas") && r.bruto!=null && r.tara!=null) det.push(`bruto ${nTon(r.bruto)} − tara ${nTon(r.tara)}`);
+      if(ver("min") && r.minutos_bascula!=null) det.push(r.minutos_bascula+" min en báscula");
     }
 
     return `<div class="it${nuevo?" nuevo":""}${e.abierta?" abierta":""}">
-      <span class="hr">${hhmm(e.t)}</span>
+      ${ver("hora")?`<span class="hr">${hhmm(e.t)}</span>`:""}
       <span class="qn">
-        <span class="chip" style="background:${planta?colorDe(r.grupo):"var(--muted)"}"></span>
-        ${esc(r.procedencia||"—")}${r.producto?` <span class="prod">${esc(r.producto)}</span>`:""}
+        <span class="chip" style="background:${planta?fondoChip(r.grupo):"var(--muted)"}"></span>
+        ${esc(r.procedencia||"—")}${ver("producto")&&r.producto?` <span class="prod">${esc(r.producto)}</span>`:""}
         ${e.abierta?'<span class="tag primera">1ª pesada · en patio</span>':""}
-        <em>${det.join(" · ")}</em></span>
+        ${det.length?`<em>${det.join(" · ")}</em>`:""}</span>
       <span class="tn">${peso!=null?nTon(peso)+" t":"—"}${e.abierta?'<small>bruto</small>':""}</span>
-      <span class="hace">${hace(minsDesde(e.t))}</span>
+      ${ver("hace")?`<span class="hace">${hace(minsDesde(e.t))}</span>`:""}
     </div>`;
   }).join("");
+  /* La rejilla se ajusta a las columnas que quedaron prendidas. */
+  $("#feed").style.gridTemplateColumns="";
+  $("#feed").classList.toggle("sin-hora", !FEED_SET.has("hora"));
+  $("#feed").classList.toggle("sin-hace", !FEED_SET.has("hace"));
   ev.forEach(e=>S.vistos.add(e.r.boleto+"|"+(e.abierta?"1":"2")));
 }
 
@@ -944,10 +1072,10 @@ function pintarBarras(min){
   // Valor siempre visible junto a cada barra: es el relieve que pide la
   // regla de contraste cuando el color queda por debajo de 3:1 en claro.
   caja.innerHTML = filas.map(([g,v],i)=>{
-    const c = colorDe(g);
+    const c = colorDe(g), f = fondoChip(g);
     return `<div class="fila">
-      <div class="nom"><span class="chip" style="background:${c}"></span>${esc(g)}</div>
-      <div class="pista"><div class="relleno" style="width:${(v.kg/max*100).toFixed(1)}%;background:${c}"></div></div>
+      <div class="nom"><span class="chip" style="background:${f}"></span>${esc(g)}</div>
+      <div class="pista"><div class="relleno" style="width:${(v.kg/max*100).toFixed(1)}%;background:${f}"></div></div>
       <div class="val">${nTon(v.kg)} t<small>${v.n} ${v.n===1?"viaje":"viajes"}</small></div>
     </div>`;
   }).join("");
@@ -1036,10 +1164,9 @@ function pintarPatio(){
        util: el neto todavia no existe porque falta la de salida. */
     const pe = c.peso_entrada!=null ? c.peso_entrada : c.bruto;
     return `<div class="camion ${cls}">
-      <div class="pl">${esc(c.placas||"—")}</div>
+      <div class="pl">${hhmm(c.entrada)}<small>entró</small></div>
       <div class="meta">${esc(c.chofer||"sin chofer")}<br>
-        <em>${esc(c.procedencia||"—")}${c.producto?" · "+esc(c.producto):""}
-        · boleto ${nNum(c.boleto)} · entró ${hhmm(c.entrada)}</em>
+        <em>boleto ${nBoleto(c.boleto)}</em>
         <span class="pesada">${pe!=null
           ? `1ª pesada <b>${nTon(pe)} t</b> · falta la de salida`
           : `1ª pesada sin peso registrado`}</span></div>
@@ -1330,7 +1457,7 @@ function graficaNivel(filas, nivel){
   const grupos=[...new Set(filas.flatMap(r=>Object.keys(r.grupos)))].sort();
   const apilar = nivel!=="procedencia" && filas.length<=60 && grupos.length>1;
 
-  let g="";
+  let g=`<defs>${TRAMAS_SVG}</defs>`;
   for(let i=0;i<=3;i++){ const v=max*i/3, yy=y(v);
     g+=`<line class="gl" x1="${mL}" y1="${yy}" x2="${W-mR}" y2="${yy}"/>`;
     g+=`<text x="${mL-7}" y="${yy+3}" text-anchor="end">${(v/1000).toFixed(0)}</text>`; }
@@ -1345,11 +1472,11 @@ function graficaNivel(filas, nivel){
         let acum=0;
         grupos.forEach(gr=>{ const v=(r.grupos[gr]||{}).kg||0; if(!v) return;
           const y1=y(acum+v), y2=y(acum);
-          g+=`<rect x="${cx-ancho/2}" y="${y1}" width="${ancho}" height="${Math.max(1,y2-y1)}" fill="${colorDe(gr)}"/>`;
+          g+=`<rect x="${cx-ancho/2}" y="${y1}" width="${ancho}" height="${Math.max(1,y2-y1)}" fill="${rellenoSvg(gr)}"/>`;
           acum+=v; });
       } else {
         const yy=y(r.kg);
-        const col = nivel==="procedencia" ? colorDe(r.clave) : null;
+        const col = nivel==="procedencia" ? rellenoSvg(r.clave) : null;
         g+=`<rect class="${col?"":"d"}" ${col?`fill="${col}"`:""} x="${cx-ancho/2}" y="${yy}" width="${ancho}" height="${Math.max(2,mT+ih-yy)}"/>`;
       }
     }
@@ -1375,7 +1502,7 @@ function graficaNivel(filas, nivel){
     });
   }
   $("#hLeyenda").innerHTML = apilar
-    ? grupos.map(gr=>`<span><span class="chip" style="background:${colorDe(gr)}"></span>${esc(gr)}</span>`).join("")
+    ? grupos.map(gr=>`<span><span class="chip" style="background:${fondoChip(gr)}"></span>${esc(gr)}</span>`).join("")
     : "";
 }
 
@@ -1472,6 +1599,44 @@ function filtradas(){
   });
 }
 
+/* Las cinco fijas son las que pidio la jefa de Administracion: con esas
+   cinco el renglon se entiende solo. Las demas se prenden con casilla y
+   arrancan apagadas, que era justo la queja: sobraba informacion. */
+const DET_COLS = [
+  {k:"boleto",          t:"Boleto",      fija:true, num:true},
+  {k:"entrada",         t:"Entrada",     fija:true},
+  {k:"salida",          t:"Salida"},
+  {k:"minutos_bascula", t:"Min",                    num:true},
+  {k:"placas",          t:"Placas"},
+  {k:"chofer",          t:"Chofer"},
+  {k:"procedencia",     t:"Procedencia", fija:true},
+  {k:"producto",        t:"Producto",    fija:true},
+  {k:"bruto",           t:"Bruto",                  num:true},
+  {k:"tara",            t:"Tara",                   num:true},
+  {k:"neto",            t:"Neto",        fija:true, num:true}
+];
+const DET_SET = prefsLeer("flash-det-cols", []);
+
+function celdaDet(k, r, mineral){
+  switch(k){
+    case "boleto":  return `<td class="num">${nBoleto(r.boleto)}${(r.alertas||[]).length?' <span class="alerta-dato">!</span>':''}</td>`;
+    case "entrada": return `<td>${fechaCorta(r.entrada)} ${hhmm(r.entrada)}</td>`;
+    case "salida":  return `<td>${hhmm(r.salida)}</td>`;
+    case "minutos_bascula": return `<td class="num">${r.minutos_bascula==null?"—":r.minutos_bascula}</td>`;
+    case "placas":  return `<td>${esc(r.placas)}</td>`;
+    case "chofer":  return `<td><div class="recorta" title="${esc(r.chofer)}">${esc(r.chofer)}</div></td>`;
+    case "procedencia": return `<td><div class="proc recorta ancha" title="${esc(r.procedencia)}${mineral?"":" · no es acarreo de mineral"}">
+        <span class="chip" style="background:${mineral?fondoChip(r.grupo):"var(--muted)"}"></span>
+        <span class="t">${esc(r.procedencia)}</span></div></td>`;
+    case "producto": return `<td><div class="recorta media" title="${esc(r.producto)}${r.clase?" · "+esc(r.clase):""}">${esc(r.producto)}${
+        r.clase && r.clase!=="MINERAL" ? ` <span class="tag otro">${esc(r.clase)}</span>` : ""}</div></td>`;
+    case "bruto":   return `<td class="num">${nNum(r.bruto)}</td>`;
+    case "tara":    return `<td class="num">${nNum(r.tara)}</td>`;
+    case "neto":    return `<td class="num"><b>${nNum(r.neto)}</b></td>`;
+  }
+  return "<td></td>";
+}
+
 function pintarTabla(){
   fijarColores();
   const f=filtradas(), o=S.orden;
@@ -1479,24 +1644,20 @@ function pintarTabla(){
     if(typeof x==="number"||typeof y==="number"){ x=x||0;y=y||0; return o.asc?x-y:y-x; }
     x=String(x||"");y=String(y||""); return o.asc?x.localeCompare(y):y.localeCompare(x); });
 
+  const cols = DET_COLS.filter(c=>c.fija || DET_SET.has(c.k));
+  $("#thead").innerHTML = "<tr>" + cols.map(c=>
+      `<th data-s="${c.k}"${c.num?' class="num"':""}>${esc(c.t)}</th>`).join("") + "</tr>";
+  $$("#tabla thead th").forEach(th=>th.addEventListener("click",()=>{
+    const c=th.dataset.s; if(!c) return;
+    S.orden = (S.orden.c===c) ? {c,asc:!S.orden.asc} : {c,asc:false};
+    pintarTabla();
+  }));
+
   $("#tbody").innerHTML = f.length ? f.map(r=>{
     const mineral = productoEsPlanta(r.producto, r.grupo);
     const al = (r.alertas||[]).length ? ` title="${esc((r.alertas||[]).join(', '))}"` : "";
-    return `<tr${al}>
-      <td class="num">${nNum(r.boleto)}${(r.alertas||[]).length?' <span class="alerta-dato">!</span>':''}</td>
-      <td>${fechaCorta(r.entrada)} ${hhmm(r.entrada)}</td>
-      <td>${hhmm(r.salida)}</td>
-      <td class="num">${r.minutos_bascula==null?"—":r.minutos_bascula}</td>
-      <td>${esc(r.placas)}</td>
-      <td><div class="recorta" title="${esc(r.chofer)}">${esc(r.chofer)}</div></td>
-      <td><div class="proc recorta ancha" title="${esc(r.procedencia)}${mineral?"":" · no es acarreo de mineral"}">
-        <span class="chip" style="background:${mineral?colorDe(r.grupo):"var(--muted)"}"></span>
-        <span class="t">${esc(r.procedencia)}</span></div></td>
-      <td><div class="recorta media" title="${esc(r.producto)}${r.clase?" · "+esc(r.clase):""}">${esc(r.producto)}${
-          r.clase && r.clase!=="MINERAL" ? ` <span class="tag otro">${esc(r.clase)}</span>` : ""}</div></td>
-      <td class="num">${nNum(r.bruto)}</td><td class="num">${nNum(r.tara)}</td>
-      <td class="num"><b>${nNum(r.neto)}</b></td></tr>`;
-  }).join("") : `<tr><td colspan="11"><div class="vacio">Nada con esos filtros.</div></td></tr>`;
+    return `<tr${al}>` + cols.map(c=>celdaDet(c.k, r, mineral)).join("") + `</tr>`;
+  }).join("") : `<tr><td colspan="${cols.length}"><div class="vacio">Nada con esos filtros.</div></td></tr>`;
 
   const kgMin=f.filter(r=> productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
   const kgOtr=f.filter(r=>!productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
@@ -1505,11 +1666,6 @@ function pintarTabla(){
   $("#pieT").textContent = nTon(kgMin)+" t de mineral";
 }
 
-$$("#tabla thead th").forEach(th=>th.addEventListener("click",()=>{
-  const c=th.dataset.s; if(!c) return;
-  S.orden = (S.orden.c===c) ? {c,asc:!S.orden.asc} : {c,asc:false};
-  pintarTabla();
-}));
 ["#fProc","#fProd","#fClase"].forEach(s=>$(s).addEventListener("change",pintarTabla));
 $("#fTexto").addEventListener("input",pintarTabla);
 ["#fDesde","#fHasta"].forEach(s=>$(s).addEventListener("change",cargarDetalle));
@@ -1574,6 +1730,13 @@ function medirEncabezado(){
   const h=document.querySelector("header");
   if(h) document.documentElement.style.setProperty("--hh", h.offsetHeight+"px");
 }
+/* Casillas de columnas. Se pintan una vez; cada cambio se guarda y
+   vuelve a dibujar nada mas su propio panel. */
+pintarCasillas($("#feedCols"), FEED_CAMPOS, FEED_SET, "flash-feed-cols",
+               pintarFeed, "procedencia y neto");
+pintarCasillas($("#detCols"), DET_COLS.filter(c=>!c.fija), DET_SET, "flash-det-cols",
+               pintarTabla, "boleto, entrada, procedencia, producto y neto");
+
 medirEncabezado();
 window.addEventListener("resize", medirEncabezado);
 /* El alto del encabezado tambien cambia solo, sin que nadie mueva la ventana:
