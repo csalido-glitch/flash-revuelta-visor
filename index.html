@@ -2,7 +2,7 @@
 <!-- ====================================================================
      FLASH DE ACARREO - VISOR
      Bascula Cieneguita - Urique, Chihuahua
-     Version V14   (18-sep-2026)
+     Version V15   (18-sep-2026)
      El numero va amarrado a la carpeta de entrega, no a un conteo aparte.
      Al modificar este archivo, sube la version aqui y en VISOR_VERSION.
      ==================================================================== -->
@@ -425,6 +425,55 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 }
 .campo input:focus, .campo select:focus { outline:2px solid var(--s1); outline-offset:1px; }
 
+/* ---------- campo de fecha propio ----------
+   El <input type="date"> del navegador se pinta con el idioma y el formato
+   del SISTEMA, no de la pagina: por eso salia 09/18/2026 en ingles y no hay
+   atributo ni CSS que lo cambie. Se queda escondido para no romper nada del
+   codigo que lee su .value en ISO, y encima va un boton nuestro con el
+   calendario en español y el formato dd-mmm-aa. */
+.fecha { position:relative; display:inline-block; }
+.fecha input[type="date"] { position:absolute; left:0; bottom:0; width:1px; height:1px;
+  opacity:0; pointer-events:none; }
+.fbtn { font:inherit; font-size:14px; color:var(--ink); background:var(--surface);
+  border:1px solid var(--border); border-radius:8px; padding:7px 10px; min-width:130px;
+  cursor:pointer; text-align:left; font-variant-numeric:tabular-nums; }
+.fbtn:hover { border-color:var(--gold); }
+.fbtn:focus-visible { outline:2px solid var(--s1); outline-offset:1px; }
+.fbtn::after { content:"▾"; float:right; color:var(--muted); margin-left:8px; }
+
+.cal { position:absolute; z-index:70; top:calc(100% + 6px); left:0; width:252px;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:var(--shadow); padding:10px; }
+.cal[hidden] { display:none; }
+.cal .cabm { display:flex; align-items:center; justify-content:space-between; gap:6px;
+  margin-bottom:8px; }
+.cal .cabm b { font-size:13px; font-weight:700; color:var(--ink); text-transform:capitalize; }
+.cal .flecha { font:inherit; font-size:15px; line-height:1; color:var(--ink-2);
+  background:none; border:1px solid var(--border); border-radius:7px; width:28px; height:28px;
+  cursor:pointer; }
+.cal .flecha:hover { border-color:var(--gold); color:var(--gold-ink); }
+.cal .rej { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+.cal .dow { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted);
+  text-align:center; padding:3px 0; }
+.cal .dia { font:inherit; font-size:12.5px; font-variant-numeric:tabular-nums;
+  background:none; border:1px solid transparent; border-radius:7px; padding:6px 0;
+  color:var(--ink); cursor:pointer; }
+.cal .dia:hover { border-color:var(--gold); }
+.cal .dia.fuera { color:var(--muted); opacity:.45; }
+.cal .dia.hoy { border-color:var(--axis); font-weight:700; }
+.cal .dia.sel { background:var(--gold-dark); border-color:var(--gold-dark); color:#fff;
+  font-weight:700; }
+:root[data-theme="dark"] .cal .dia.sel { background:var(--gold); border-color:var(--gold);
+  color:#1a1a19; }
+@media (prefers-color-scheme: dark){ :root:where(:not([data-theme="light"])) .cal .dia.sel{
+  background:var(--gold); border-color:var(--gold); color:#1a1a19; } }
+.cal .piecal { display:flex; justify-content:space-between; gap:6px; margin-top:8px;
+  padding-top:8px; border-top:1px solid var(--border); }
+.cal .piecal button { font:inherit; font-size:12px; font-weight:600; color:var(--ink-2);
+  background:none; border:1px solid var(--border); border-radius:7px; padding:4px 10px;
+  cursor:pointer; }
+.cal .piecal button:hover { border-color:var(--gold); color:var(--gold-ink); }
+
 .tabla-caja { overflow-x:auto; border:1px solid var(--border); border-radius:12px; }
 table { width:100%; border-collapse:collapse; font-size:12.5px; }
 th, td { padding:8px 10px; text-align:left; white-space:nowrap; }
@@ -644,8 +693,12 @@ td .recorta.media  { max-width:146px; }
       <p class="sub">Los filtros se combinan y el total se recalcula al vuelo.</p>
       <div class="casillas" id="detCols"></div>
       <div class="filtros">
-        <div class="campo"><label for="fDesde">Desde</label><input type="date" id="fDesde"></div>
-        <div class="campo"><label for="fHasta">Hasta</label><input type="date" id="fHasta"></div>
+        <div class="campo"><label for="fDesdeBtn">Desde</label>
+          <div class="fecha"><button type="button" class="fbtn" id="fDesdeBtn">—</button>
+          <input type="date" id="fDesde" tabindex="-1" aria-hidden="true"></div></div>
+        <div class="campo"><label for="fHastaBtn">Hasta</label>
+          <div class="fecha"><button type="button" class="fbtn" id="fHastaBtn">—</button>
+          <input type="date" id="fHasta" tabindex="-1" aria-hidden="true"></div></div>
         <div class="campo"><label for="fProc">Procedencia</label><select id="fProc"><option value="">Todas</option></select></div>
         <div class="campo"><label for="fProd">Producto</label><select id="fProd"><option value="">Todos</option></select></div>
         <div class="campo"><label for="fClase">Clase</label><select id="fClase"><option value="">Todas</option></select></div>
@@ -669,7 +722,7 @@ td .recorta.media  { max-width:146px; }
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V14 · 18-sep-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V15 · 18-sep-2026)</span>
   </p>
 </div>
 
@@ -686,7 +739,7 @@ const DB = "https://flash-revuelta-mrt-csalido-default-rtdb.firebaseio.com";
 // Lo que NO es acarreo de mineral. Se muestra aparte, nunca dentro del total.
 const NO_MINERAL = ["GRAVARENA", "DIESEL"];
 
-const VISOR_VERSION = "14";    // mismo numero que la carpeta de entrega; sale al pie
+const VISOR_VERSION = "15";    // mismo numero que la carpeta de entrega; sale al pie
 const REFRESCO_MS   = 30000;  // cada cuanto relee Firebase
 const FRESCO_MIN    = 10;     // verde  hasta aqui
 const TIBIO_MIN     = 30;     // ambar  hasta aqui, despues rojo
@@ -1765,9 +1818,97 @@ function pintarTabla(){
 ["#fProc","#fProd","#fClase"].forEach(s=>$(s).addEventListener("change",pintarTabla));
 $("#fTexto").addEventListener("input",pintarTabla);
 ["#fDesde","#fHasta"].forEach(s=>$(s).addEventListener("change",cargarDetalle));
+/* ===================================================================
+   CALENDARIO EN ESPAÑOL  (dd-mmm-aa)
+   ===================================================================
+   El calendario del navegador sale en el idioma del sistema y con el
+   formato del sistema; no hay manera de mandarlo desde la pagina. Este
+   es propio, asi se ve igual en cualquier maquina. El <input type="date">
+   sigue ahi, escondido, guardando la fecha en ISO: todo lo que ya leia
+   su .value sigue funcionando sin enterarse. */
+const MES_LARGO = ["enero","febrero","marzo","abril","mayo","junio","julio",
+                   "agosto","septiembre","octubre","noviembre","diciembre"];
+const MES_CORTO = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const DOW_CORTO = ["do","lu","ma","mi","ju","vi","sa"];   // domingo a sabado, como en bascula
+
+const isoAPartes = iso => { const p=String(iso||"").split("-").map(Number);
+  return (p.length===3 && !p.some(isNaN)) ? p : null; };
+const fmtDDMMMAA = iso => { const p=isoAPartes(iso); if(!p) return "—";
+  return String(p[2]).padStart(2,"0")+"-"+MES_CORTO[p[1]-1]+"-"+String(p[0]).slice(2); };
+const aISO = (a,m,d) => a+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+
+function montarFecha(idInput, idBoton){
+  const inp=$("#"+idInput), btn=$("#"+idBoton);
+  if(!inp||!btn) return;
+  const cal=document.createElement("div");
+  cal.className="cal"; cal.hidden=true; cal.setAttribute("role","dialog");
+  btn.parentNode.appendChild(cal);
+  let verA, verM;   // mes que se esta viendo
+
+  const refresca = () => { btn.textContent = inp.value ? fmtDDMMMAA(inp.value) : "—"; };
+
+  function pinta(){
+    const hoy=new Date(), hoyISO_=aISO(hoy.getFullYear(),hoy.getMonth()+1,hoy.getDate());
+    const primero=new Date(verA,verM,1), corr=primero.getDay();
+    const enMes=new Date(verA,verM+1,0).getDate();
+    const enPrev=new Date(verA,verM,0).getDate();
+    let celdas="";
+    for(let i=corr-1;i>=0;i--) celdas+=`<button type="button" class="dia fuera" disabled>${enPrev-i}</button>`;
+    for(let d=1;d<=enMes;d++){
+      const iso=aISO(verA,verM+1,d);
+      const cls=["dia"];
+      if(iso===inp.value) cls.push("sel");
+      if(iso===hoyISO_)   cls.push("hoy");
+      celdas+=`<button type="button" class="${cls.join(" ")}" data-iso="${iso}">${d}</button>`;
+    }
+    cal.innerHTML=`<div class="cabm">
+        <button type="button" class="flecha" data-mv="-1" aria-label="Mes anterior">‹</button>
+        <b>${MES_LARGO[verM]} ${verA}</b>
+        <button type="button" class="flecha" data-mv="1" aria-label="Mes siguiente">›</button>
+      </div>
+      <div class="rej">${DOW_CORTO.map(x=>`<span class="dow">${x}</span>`).join("")}${celdas}</div>
+      <div class="piecal"><button type="button" data-hoy="1">Hoy</button>
+        <button type="button" data-cerrar="1">Cerrar</button></div>`;
+  }
+
+  function abre(){
+    const p=isoAPartes(inp.value)||isoAPartes(hoyISO());
+    verA=p[0]; verM=p[1]-1;
+    pinta(); cal.hidden=false;
+  }
+  const cierra = () => { cal.hidden=true; };
+
+  btn.addEventListener("click",()=>{ cal.hidden ? abre() : cierra(); });
+  cal.addEventListener("click",e=>{
+    const b=e.target.closest("button"); if(!b) return;
+    if(b.dataset.mv){ verM+=Number(b.dataset.mv);
+      if(verM<0){verM=11;verA--;} if(verM>11){verM=0;verA++;} pinta(); return; }
+    if(b.dataset.cerrar){ cierra(); return; }
+    const iso = b.dataset.hoy ? hoyISO() : b.dataset.iso;
+    if(!iso) return;
+    inp.value=iso; refresca(); cierra();
+    inp.dispatchEvent(new Event("change",{bubbles:true}));
+  });
+  /* Se cierra con mousedown, no con click, a proposito: al picarle a las
+     flechas el calendario se redibuja completo y para cuando llegaba el
+     click el boton ya no existia en la pagina. El de "afuera" creia que
+     habias picado fuera y lo cerraba. En mousedown todavia esta ahi. */
+  document.addEventListener("mousedown",e=>{
+    if(!cal.hidden && !cal.contains(e.target) && e.target!==btn) cierra(); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") cierra(); });
+
+  inp.addEventListener("change", refresca);
+  refresca();
+  return refresca;
+}
+const sincroDesde = montarFecha("fDesde","fDesdeBtn");
+const sincroHasta = montarFecha("fHasta","fHastaBtn");
+/* Cuando el codigo cambia la fecha por su cuenta, el boton se entera. */
+function sincroFechas(){ sincroDesde&&sincroDesde(); sincroHasta&&sincroHasta(); }
+
 $("#bLimpiar").addEventListener("click",()=>{
   $("#fProc").value=""; $("#fProd").value=""; $("#fClase").value=""; $("#fTexto").value="";
-  $("#fDesde").value=S.fecha; $("#fHasta").value=S.fecha; cargarDetalle();
+  $("#fDesde").value=S.fecha; $("#fHasta").value=S.fecha; sincroFechas(); cargarDetalle();
 });
 $("#bCsv").addEventListener("click",()=>{
   const f=filtradas();
@@ -1804,7 +1945,8 @@ async function cargar(){
   const pack = await traer("/boletos/"+S.fecha);
   S.dia = pack ? Object.values(pack) : [];
 
-  if(!$("#fDesde").value){ $("#fDesde").value=S.fecha; $("#fHasta").value=S.fecha; }
+  if(!$("#fDesde").value){ $("#fDesde").value=S.fecha; $("#fHasta").value=S.fecha;
+    if(typeof sincroFechas==="function") sincroFechas(); }
 
   sello(); pintarHoy(); pintarPatio();
   if(!$("#p-historico").classList.contains("oculto")) pintarHistorico();
