@@ -2,7 +2,8 @@
 <!-- ====================================================================
      FLASH DE ACARREO - VISOR
      Bascula Cieneguita - Urique, Chihuahua
-     Version V1.0   (2026-09-18)
+     Version V12   (18-sep-2026)
+     El numero va amarrado a la carpeta de entrega, no a un conteo aparte.
      Al modificar este archivo, sube la version aqui y en VISOR_VERSION.
      ==================================================================== -->
 <html lang="es">
@@ -311,12 +312,28 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .camion .pl small { display:block; font-size:11px; font-weight:600; color:var(--muted);
               letter-spacing:.04em; text-transform:uppercase; }
 .camion .meta { font-size:13px; color:var(--ink-2); min-width:0; }
-.camion .meta em { font-style:normal; color:var(--muted); }
+.camion .meta em { font-style:normal; color:var(--muted); display:block; margin-top:2px; }
+/* Renglon de procedencia: es lo primero que se busca al ver un camion
+   parado en el patio, asi que va arriba y con su color. */
+.camion .deDonde { display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+  font-weight:600; color:var(--ink); }
+.camion .deDonde .prod { font-weight:600; font-size:11px; letter-spacing:.05em;
+  color:var(--muted); }
 .camion .tiempo { font-size:17px; font-weight:700; font-variant-numeric:tabular-nums;
                   white-space:nowrap; display:flex; align-items:center; gap:6px; }
 .camion.alerta { border-color:color-mix(in srgb,var(--critical) 50%, var(--border)); }
 .camion.alerta .tiempo { color:var(--critical); }
 .camion.aviso  .tiempo { color:var(--serious); }
+/* En celular la tarjeta se acomoda en dos pisos: arriba la hora y los
+   minutos, abajo el resto a todo lo ancho. En tres columnas el de en medio
+   quedaba tan angosto que cada dato se partia en dos o tres renglones. */
+@media (max-width:560px){
+  .camion { grid-template-columns:1fr auto; gap:8px 12px; padding:12px 14px; }
+  .camion .pl { grid-column:1; grid-row:1; min-width:0; }
+  .camion .pl small { display:inline; margin-left:7px; }
+  .camion .tiempo { grid-column:2; grid-row:1; justify-self:end; }
+  .camion .meta { grid-column:1 / -1; grid-row:2; }
+}
 
 .casillas { display:flex; flex-wrap:wrap; gap:6px 14px; margin:0 0 14px;
   padding:10px 12px; border:1px dashed var(--border); border-radius:10px;
@@ -626,7 +643,7 @@ td .recorta.media  { max-width:146px; }
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V1.0)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V12 · 18-sep-2026)</span>
   </p>
 </div>
 
@@ -643,7 +660,7 @@ const DB = "https://flash-revuelta-mrt-csalido-default-rtdb.firebaseio.com";
 // Lo que NO es acarreo de mineral. Se muestra aparte, nunca dentro del total.
 const NO_MINERAL = ["GRAVARENA", "DIESEL"];
 
-const VISOR_VERSION = "1.0";   // sube con cada cambio; sale al pie y en el titulo
+const VISOR_VERSION = "12";    // mismo numero que la carpeta de entrega; sale al pie
 const REFRESCO_MS   = 30000;  // cada cuanto relee Firebase
 const FRESCO_MIN    = 10;     // verde  hasta aqui
 const TIBIO_MIN     = 30;     // ambar  hasta aqui, despues rojo
@@ -1181,10 +1198,19 @@ function pintarPatio(){
     /* Del camion en patio ya se sabe su PRIMERA pesada. Mostrarla es lo
        util: el neto todavia no existe porque falta la de salida. */
     const pe = c.peso_entrada!=null ? c.peso_entrada : c.bruto;
+    const planta = productoEsPlanta(c.producto, c.grupo);
+    const ident = [];
+    if(c.chofer) ident.push(esc(c.chofer));
+    if(c.placas) ident.push("placas "+esc(c.placas));
+    ident.push("boleto "+nBoleto(c.boleto));
     return `<div class="camion ${cls}">
       <div class="pl">${hhmm(c.entrada)}<small>entró</small></div>
-      <div class="meta">${esc(c.chofer||"sin chofer")}<br>
-        <em>boleto ${nBoleto(c.boleto)}</em>
+      <div class="meta">
+        <span class="deDonde">
+          <span class="chip" style="background:${planta?fondoChip(c.grupo):"var(--muted)"}"></span>
+          ${esc(c.procedencia||"sin procedencia")}${c.producto?` <span class="prod">${esc(c.producto)}</span>`:""}${
+            c.clase && c.clase!==c.producto ? ` <span class="tag otro">${esc(c.clase)}</span>` : ""}</span>
+        <em>${ident.join(" · ")}</em>
         <span class="pesada">${pe!=null
           ? `1ª pesada <b>${nTon(pe)} t</b> · falta la de salida`
           : `1ª pesada sin peso registrado`}</span></div>
