@@ -395,6 +395,10 @@ tbody tr:last-child { border-bottom:none; }
    "td.num", asi que los numeros se iban a la derecha y el titulo se quedaba
    a la izquierda: VIAJES y TOTAL T no caian sobre sus propias cifras. */
 th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
+/* En el DESGLOSE los numeros van centrados debajo de su encabezado. Los
+   nombres de procedencia son mucho mas anchos que las cifras, y pegadas a
+   la derecha se veian sueltas, lejos del titulo al que pertenecen. */
+#tHist th.num, #tHist td.num { text-align:center; }
 .resumen-tabla { margin-top:14px; padding:14px 16px; border-radius:12px;
   background:var(--plane); border:1px solid var(--border);
   display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap;
