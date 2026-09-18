@@ -2,7 +2,7 @@
 <!-- ====================================================================
      FLASH DE ACARREO - VISOR
      Bascula Cieneguita - Urique, Chihuahua
-     Version V13   (18-sep-2026)
+     Version V14   (18-sep-2026)
      El numero va amarrado a la carpeta de entrega, no a un conteo aparte.
      Al modificar este archivo, sube la version aqui y en VISOR_VERSION.
      ==================================================================== -->
@@ -491,8 +491,8 @@ td .recorta.media  { max-width:146px; }
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="true"  data-t="hoy">Hoy</button>
       <button class="tab" role="tab" aria-selected="false" data-t="patio">En patio<span class="badge" id="bPatio">0</span></button>
-        <button class="tab" role="tab" aria-selected="false" data-t="historico">Histórico</button>
       <button class="tab" role="tab" aria-selected="false" data-t="detalle">Detalle</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="historico">Histórico</button>
     </nav>
     <div class="spacer"></div>
     <div id="seal" class="seal"><span class="dot"></span><span id="sealTxt">Conectando…</span></div>
@@ -669,7 +669,7 @@ td .recorta.media  { max-width:146px; }
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V13 · 18-sep-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V14 · 18-sep-2026)</span>
   </p>
 </div>
 
@@ -686,7 +686,7 @@ const DB = "https://flash-revuelta-mrt-csalido-default-rtdb.firebaseio.com";
 // Lo que NO es acarreo de mineral. Se muestra aparte, nunca dentro del total.
 const NO_MINERAL = ["GRAVARENA", "DIESEL"];
 
-const VISOR_VERSION = "13";    // mismo numero que la carpeta de entrega; sale al pie
+const VISOR_VERSION = "14";    // mismo numero que la carpeta de entrega; sale al pie
 const REFRESCO_MS   = 30000;  // cada cuanto relee Firebase
 const FRESCO_MIN    = 10;     // verde  hasta aqui
 const TIBIO_MIN     = 30;     // ambar  hasta aqui, despues rojo
