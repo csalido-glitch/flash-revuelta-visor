@@ -94,7 +94,8 @@ body {
 .banner-mrt .subtitle { font-size:clamp(8px, .75vw, 12px); color:#444; margin-top:2px; text-align:center; }
 
 .segmentadores { position:sticky; top:0; z-index:40; margin:-6px -4px 16px; padding:12px 4px 10px;
-  background:var(--bg); border-bottom:1px solid var(--border);
+  background:var(--plane); border-bottom:1px solid var(--border);
+  box-shadow:0 6px 10px -8px rgba(11,11,11,.28);
   display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
 .seg { display:flex; flex-direction:column; gap:5px; min-width:0; }
 .seg-t { font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
@@ -129,8 +130,10 @@ tbody tr.baja:hover td:first-child::after { color:var(--gold-ink); }
 /* ---------- barra de estado ---------- */
 header {
   position: sticky; top: 0; z-index: 20;
-  background: color-mix(in srgb, var(--plane) 92%, transparent);
-  backdrop-filter: blur(8px);
+  /* Opaco a proposito. El vidrio esmerilado se ve bien en escritorio, pero en
+     celular el contenido se alcanza a leer por detras de las pestanas y se
+     revuelve todo al bajar. Legibilidad antes que efecto. */
+  background: var(--plane);
   border-bottom: 1px solid var(--border);
 }
 .hbar { max-width:1180px; margin:0 auto; padding:10px 16px;
@@ -353,7 +356,10 @@ thead th:hover { background:#24333f; }
 tbody tr { border-bottom:1px solid var(--grid); }
 tbody tr:hover { background:var(--plane); }
 tbody tr:last-child { border-bottom:none; }
-td.num { text-align:right; font-variant-numeric:tabular-nums; }
+/* El encabezado se alinea igual que su columna. Antes la regla solo decia
+   "td.num", asi que los numeros se iban a la derecha y el titulo se quedaba
+   a la izquierda: VIAJES y TOTAL T no caian sobre sus propias cifras. */
+th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
 .resumen-tabla { margin-top:14px; padding:14px 16px; border-radius:12px;
   background:var(--plane); border:1px solid var(--border);
   display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap;
@@ -554,10 +560,10 @@ td .recorta.media  { max-width:146px; }
       <div class="tabla-caja">
         <table id="tabla">
           <thead><tr>
-            <th data-s="boleto">Boleto</th>
+            <th data-s="boleto" class="num">Boleto</th>
             <th data-s="entrada">Entrada</th>
             <th data-s="salida">Salida</th>
-            <th data-s="minutos_bascula">Min</th>
+            <th data-s="minutos_bascula" class="num">Min</th>
             <th data-s="placas">Placas</th>
             <th data-s="chofer">Chofer</th>
             <th data-s="procedencia">Procedencia</th>
@@ -1377,7 +1383,7 @@ function tablaHistorico(filas, nivel){
   const porProc = nivel==="procedencia";
   const grupos = porProc ? [] : [...new Set(filas.flatMap(r=>Object.keys(r.grupos)))].sort();
   const hayRango = filas.some(r=>rangoFila(r));
-  $("#tHistHead").innerHTML=`<tr><th>#</th><th>${ETIQ_NIVEL[nivel]}</th>`
+  $("#tHistHead").innerHTML=`<tr><th class="num">#</th><th>${ETIQ_NIVEL[nivel]}</th>`
     + (hayRango?`<th>Fechas</th>`:``)
     + `<th class="num">Viajes</th>`
     + grupos.map(g=>`<th class="num">${esc(g)}</th>`).join("")
@@ -1570,6 +1576,15 @@ function medirEncabezado(){
 }
 medirEncabezado();
 window.addEventListener("resize", medirEncabezado);
+/* El alto del encabezado tambien cambia solo, sin que nadie mueva la ventana:
+   el sello pasa de "En vivo · hace 2 min" a "Sin senal · ultimo dato a las
+   18:50" y en celular las pestanas se envuelven. Si no se vuelve a medir,
+   los segmentadores se pegan a la altura vieja y queda una rendija por donde
+   se asoma el contenido al bajar. Con el observador se mide cada vez. */
+if(window.ResizeObserver){
+  const _h=document.querySelector("header");
+  if(_h) new ResizeObserver(medirEncabezado).observe(_h);
+}
 </script>
 </body>
 </html>
