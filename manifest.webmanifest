@@ -1,0 +1,16 @@
+{
+  "name": "Flash de Acarreo — MRT Cieneguita",
+  "short_name": "Acarreo MRT",
+  "description": "Acarreo de mineral a planta, en vivo desde la báscula de Cieneguita. Urique, Chihuahua.",
+  "lang": "es-MX",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f5f2",
+  "theme_color": "#1a2733",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

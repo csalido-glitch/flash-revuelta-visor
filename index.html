@@ -2,7 +2,7 @@
 <!-- ====================================================================
      FLASH DE ACARREO - VISOR
      Bascula Cieneguita - Urique, Chihuahua
-     Version V15   (18-sep-2026)
+     Version V16   (19-sep-2026)
      El numero va amarrado a la carpeta de entrega, no a un conteo aparte.
      Al modificar este archivo, sube la version aqui y en VISOR_VERSION.
      ==================================================================== -->
@@ -11,6 +11,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flash de Acarreo — Minera Río Tinto</title>
+
+<!-- Para poder anclarlo a la pantalla de inicio del celular, igual que el
+     Flash de Planta. Sin esto el telefono lo guarda como un acceso directo
+     del navegador; con esto lo trata como aplicacion: icono propio, nombre
+     propio y sin la barra de direcciones encima. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1a2733">
+<link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Acarreo MRT">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 /* ===================================================================
    FLASH DE ACARREO - Minera Rio Tinto
@@ -722,7 +735,7 @@ td .recorta.media  { max-width:146px; }
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V15 · 18-sep-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V16 · 19-sep-2026)</span>
   </p>
 </div>
 
@@ -739,7 +752,7 @@ const DB = "https://flash-revuelta-mrt-csalido-default-rtdb.firebaseio.com";
 // Lo que NO es acarreo de mineral. Se muestra aparte, nunca dentro del total.
 const NO_MINERAL = ["GRAVARENA", "DIESEL"];
 
-const VISOR_VERSION = "15";    // mismo numero que la carpeta de entrega; sale al pie
+const VISOR_VERSION = "16";    // mismo numero que la carpeta de entrega; sale al pie
 const REFRESCO_MS   = 30000;  // cada cuanto relee Firebase
 const FRESCO_MIN    = 10;     // verde  hasta aqui
 const TIBIO_MIN     = 30;     // ambar  hasta aqui, despues rojo
