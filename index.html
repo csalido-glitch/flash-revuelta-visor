@@ -2,7 +2,7 @@
 <!-- ====================================================================
      FLASH DE ACARREO - VISOR
      Bascula Cieneguita - Urique, Chihuahua
-     Version V16   (19-sep-2026)
+     Version V18   (02-oct-2026)
      El numero va amarrado a la carpeta de entrega, no a un conteo aparte.
      Al modificar este archivo, sube la version aqui y en VISOR_VERSION.
      ==================================================================== -->
@@ -232,6 +232,8 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .pulso.lenta    .aro { background:var(--warning); color:var(--warning); }
 .pulso.parada   .aro { background:var(--critical); color:var(--critical); }
 .pulso.sindato  .aro { background:var(--muted); color:var(--muted); }
+/* Cerrada: gris sobrio. No es alarma, es que ya se acabo el turno. */
+.pulso.cerrada  .aro { background:var(--axis); color:var(--axis); }
 @keyframes latir { 0%{opacity:.6;transform:scale(.6)} 70%{opacity:0;transform:scale(1.35)} 100%{opacity:0} }
 @media (prefers-reduced-motion: reduce){ .latido .aro::after{ animation:none } }
 
@@ -240,6 +242,7 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .pulso.lenta   .txt .est { color:var(--ink); }
 .pulso.parada  .txt .est { color:var(--critical); }
 .pulso.sindato .txt .est { color:var(--muted); }
+.pulso.cerrada .txt .est { color:var(--ink-2); }
 .latido .txt .cuando { font-size:13px; color:var(--muted); margin-top:2px; }
 
 .pulso .ritmo-nota { font-size:13px; color:var(--muted); }
@@ -334,9 +337,20 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
   color:var(--muted); }
 .camion .tiempo { font-size:17px; font-weight:700; font-variant-numeric:tabular-nums;
                   white-space:nowrap; display:flex; align-items:center; gap:6px; }
+/* Pasando la hora el dato se apila: arriba la hora, abajo el minuto. */
+.camion .tiempo .hm { display:flex; flex-direction:column; align-items:flex-end; line-height:1.12; }
+.camion .tiempo .hm small { font-size:11px; font-weight:600; color:var(--muted);
+                  letter-spacing:.02em; margin-top:1px; }
 .camion.alerta { border-color:color-mix(in srgb,var(--critical) 50%, var(--border)); }
 .camion.alerta .tiempo { color:var(--critical); }
 .camion.aviso  .tiempo { color:var(--serious); }
+
+/* Renglon de referencia bajo los numeros de Hoy: aparece nomas cuando
+   hoy todavia no cierra ningun boleto, para que el tablero en ceros no
+   se confunda con una falla. */
+.refDia { display:none; margin-top:11px; font-size:12.5px; color:var(--muted);
+          line-height:1.5; }
+.refDia b { color:var(--ink-2); font-weight:600; }
 
 /* Encabezado de tarjeta con un dato al margen derecho. */
 .cab { display:flex; align-items:flex-start; justify-content:space-between;
@@ -601,6 +615,8 @@ td .recorta.media  { max-width:146px; }
       </div>
     </div>
 
+    <div class="refDia" id="kRef"></div>
+
     <div class="otros" id="otros"></div>
 
     <div class="card" style="margin-top:16px">
@@ -735,7 +751,7 @@ td .recorta.media  { max-width:146px; }
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V16 · 19-sep-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V18 · 02-oct-2026)</span>
   </p>
 </div>
 
@@ -752,7 +768,7 @@ const DB = "https://flash-revuelta-mrt-csalido-default-rtdb.firebaseio.com";
 // Lo que NO es acarreo de mineral. Se muestra aparte, nunca dentro del total.
 const NO_MINERAL = ["GRAVARENA", "DIESEL"];
 
-const VISOR_VERSION = "16";    // mismo numero que la carpeta de entrega; sale al pie
+const VISOR_VERSION = "18";    // mismo numero que la carpeta de entrega; sale al pie
 const REFRESCO_MS   = 30000;  // cada cuanto relee Firebase
 const FRESCO_MIN    = 10;     // verde  hasta aqui
 const TIBIO_MIN     = 30;     // ambar  hasta aqui, despues rojo
@@ -766,6 +782,11 @@ const PULSO_PARADA  = 4.0;    // veces el intervalo tipico -> rojo
 const PULSO_MIN_LENTA  = 30;  // piso en minutos, para dias de poco movimiento
 const PULSO_MIN_PARADA = 75;
 const FEED_N        = 6;      // cuantas pesadas muestra el feed
+
+// Horario de la bascula. Fuera de esta ventana no hay nadie pesando, asi
+// que ni se alarma ni se cuenta el tiempo muerto como si fuera un paro.
+const HORA_ABRE   = 7;
+const HORA_CIERRA = 19;
 
 const SERIES = ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"];
 
@@ -783,6 +804,30 @@ const nNum = v => (v==null||isNaN(v)) ? "—" : Number(v).toLocaleString("es-MX"
 const nBoleto = v => (v==null||v==="") ? "—" : String(v);
 const hhmm = s => { if(!s) return "—"; const d=new Date(s); return isNaN(d)?"—":
   String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+/* Dia calendario al que pertenece una marca de tiempo, en ISO.
+   Se usa para el CORTE DIARIO: lo de hoy se cuenta con lo de hoy y nada
+   mas. Primero se lee el texto tal cual (asi viene de la bascula) y solo
+   si no trae fecha se recurre a Date. */
+const diaDe = t => { if(!t) return null;
+  const m = String(t).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[1]+"-"+m[2]+"-"+m[3];
+  const d = new Date(t); return isNaN(d) ? null :
+    d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+/* Cuanto lleva un camion en el patio. Mientras no pase de la hora se lee
+   en minutos, que es como lo dice la gente. Pasando la hora se vuelve
+   ilegible ("1,168 min"), asi que arriba va la hora en decimal -que es
+   como se saca un promedio- y abajo, en chico, el minuto exacto. */
+const tiempoPatio = (m, mAbiertos) => {
+  if(m==null || isNaN(m) || m<0) return "—";
+  if(m < 60) return m+" min";
+  /* Arriba el reloj de pared, que es lo que de veras lleva ahi parado.
+     Abajo, si el camion se quedo la noche, los minutos que cuentan: los
+     que la bascula estuvo abierta. */
+  const pie = (mAbiertos!=null && mAbiertos!==m)
+    ? `${nNum(mAbiertos)} min abiertos`
+    : `${nNum(m)} min`;
+  return `<span class="hm">${(m/60).toFixed(2)} h<small>${pie}</small></span>`;
+};
 const fechaCorta = s => { if(!s) return ""; const d=new Date(s); return isNaN(d)?"":
   String(d.getDate()).padStart(2,"0")+"/"+["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][d.getMonth()]; };
 const heroFit = (el, txt) => { el.innerHTML=txt;
@@ -801,8 +846,8 @@ async function traer(ruta){
 /* ===================================================================
    ESTADO
    =================================================================== */
-const S = { salud:null, resumen:{}, patio:[], dia:[], fecha:hoyISO(), detalle:[],
-            orden:{c:"boleto",asc:false}, colores:{}, vistos:null };
+const S = { salud:null, resumen:{}, patio:[], dia:[], fecha:hoyISO(), ultimoDia:null,
+            detalle:[], orden:{c:"boleto",asc:false}, colores:{}, vistos:null };
 
 /* El color sigue a la procedencia, no a su posicion en el ranking.
    Se fija alfabeticamente sobre todas las procedencias conocidas, asi
@@ -834,7 +879,7 @@ const LUGARES = [
   "LA MILLONARIA",                  /*  6  verde           */
   "TOSTON URIQUE",                  /*  7  violeta         */
   "EL ROSARIO-URIQUE",              /*  8  rojo            */
-  "VINATITA",                       /*  9  azul rayado     */
+  "VINATITA II URIQUE",             /*  9  azul rayado     */
   "SANGRE DE CRISTO - GUAZAPARES",  /* 10  naranja rayado  */
   "BAHUICHIVO RCM",                 /* 11  aqua rayado     */
   "TAUNITAS",                       /* 12  amarillo rayado */
@@ -970,6 +1015,33 @@ function sello(){
 const minsDesde = iso => { const d=new Date(iso);
   return isNaN(d) ? null : Math.floor((Date.now()-d.getTime())/60000); };
 
+/* Reloj de pared contra reloj de la bascula.
+   A las 7:05 de la manana, la ultima pesada de ayer tiene 12 horas de
+   vieja, pero 12 horas en las que la bascula estuvo cerrada: decir
+   "DETENIDA" ahi es mentira. minsAbiertos cuenta SOLO los minutos
+   dentro del horario de trabajo, recortando cada dia a su ventana.
+   El semaforo se mide con eso; el "hace cuanto" sigue siendo de pared. */
+const abierta = (d) => { const x=d||new Date();
+  return x.getHours()>=HORA_ABRE && x.getHours()<HORA_CIERRA; };
+
+function minsAbiertos(desde, hasta){
+  const a = desde instanceof Date ? desde : new Date(desde);
+  const b = hasta ? (hasta instanceof Date ? hasta : new Date(hasta)) : new Date();
+  if(isNaN(a) || isNaN(b) || b<=a) return 0;
+  let total=0;
+  const cur = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  for(let i=0; i<400 && cur<=b; i++){
+    const ini=new Date(cur); ini.setHours(HORA_ABRE,0,0,0);
+    const fin=new Date(cur); fin.setHours(HORA_CIERRA,0,0,0);
+    const d1 = a>ini ? a : ini, d2 = b<fin ? b : fin;
+    if(d2>d1) total += (d2-d1)/60000;
+    cur.setDate(cur.getDate()+1);
+  }
+  return Math.floor(total);
+}
+const minsAbiertosDesde = iso => { const d=new Date(iso);
+  return isNaN(d) ? null : minsAbiertos(d); };
+
 function hace(min){
   if(min==null) return "—";
   if(min < 1)  return "hace un momento";
@@ -999,8 +1071,12 @@ function eventosBascula(){
     if(r.entrada) ev.push({t:r.entrada, tipo:"primera", cerrado:!!r.salida, r});
     if(r.salida)  ev.push({t:r.salida,  tipo:"segunda", cerrado:true,        r});
   });
+  /* Solo los camiones que ENTRARON hoy. El que se quedo de ayer sigue
+     apareciendo en "En patio" -ahi esta parado, es un hecho-, pero no
+     cuenta como actividad de hoy ni le mueve el ritmo a la bascula. */
   (S.patio||[]).forEach(c=>{
-    if(c.entrada) ev.push({t:c.entrada, tipo:"primera", cerrado:false, enPatio:true, r:c});
+    if(c.entrada && diaDe(c.entrada)===S.fecha)
+      ev.push({t:c.entrada, tipo:"primera", cerrado:false, enPatio:true, r:c});
   });
   return ev.sort((a,b)=>String(a.t).localeCompare(String(b.t)));
 }
@@ -1016,25 +1092,32 @@ function intervaloEventos(ev){
 function pintarPulso(){
   const caja=$("#pulso");
   const ev=eventosBascula();
-  caja.classList.remove("activa","lenta","parada","sindato");
+  caja.classList.remove("activa","lenta","parada","sindato","cerrada");
+  const hoyAbierta = abierta();
 
   if(!ev.length){
-    caja.classList.add("sindato");
-    $("#pEstado").textContent="SIN MOVIMIENTO";
-    $("#pCuando").textContent="No hay pesadas registradas este día.";
+    caja.classList.add(hoyAbierta ? "sindato" : "cerrada");
+    $("#pEstado").textContent = hoyAbierta ? "SIN MOVIMIENTO" : "FUERA DE HORARIO";
+    $("#pCuando").textContent = hoyAbierta
+      ? `Todavía no hay pesadas hoy. La báscula abrió a las ${HORA_ABRE}:00.`
+      : `La báscula trabaja de ${HORA_ABRE}:00 a ${HORA_CIERRA}:00. Hoy no hubo pesadas.`;
     $("#pRitmo").textContent=""; $("#pUltima").innerHTML="";
     return;
   }
 
   const ult=ev[ev.length-1];
-  const min=minsDesde(ult.t);
+  const minReloj = minsDesde(ult.t);            // lo que marca el reloj
+  const min      = minsAbiertosDesde(ult.t);    // solo con la bascula abierta
   const tip=intervaloEventos(ev);
 
   const uLenta  = tip ? Math.max(PULSO_MIN_LENTA,  Math.round(tip*PULSO_LENTA))  : PULSO_MIN_LENTA;
   const uParada = tip ? Math.max(PULSO_MIN_PARADA, Math.round(tip*PULSO_PARADA)) : PULSO_MIN_PARADA;
 
+  /* Cerrada no es lo mismo que detenida. A las 8 de la noche el tablero
+     no tiene por que gritar: nadie esta pesando porque ya cerraron. */
   let estado;
-  if(min==null)            { caja.classList.add("sindato"); estado="SIN DATO"; }
+  if(!hoyAbierta)          { caja.classList.add("cerrada"); estado="FUERA DE HORARIO"; }
+  else if(min==null)       { caja.classList.add("sindato"); estado="SIN DATO"; }
   else if(min < uLenta)    { caja.classList.add("activa");  estado="ACTIVA"; }
   else if(min < uParada)   { caja.classList.add("lenta");   estado="SIN MOVIMIENTO"; }
   else                     { caja.classList.add("parada");  estado="DETENIDA"; }
@@ -1043,11 +1126,20 @@ function pintarPulso(){
   const queFue = ult.tipo==="primera"
       ? (ult.enPatio ? "Primera pesada (sigue en patio)" : "Primera pesada")
       : "Pesada cerrada";
-  $("#pCuando").textContent = queFue+" "+hace(min);
+  let cuandoTxt = queFue+" "+hace(minReloj);
+  /* Si el hueco cruzo horas cerradas, se aclara: si no, un "hace 13
+     horas" en verde se lee como error. */
+  if(hoyAbierta && min!=null && minReloj!=null && minReloj-min>=15)
+    cuandoTxt += ` · ${min} min con la báscula abierta`;
+  $("#pCuando").textContent = cuandoTxt;
 
   /* La nota explica POR QUE esta en ese estado, en vez de soltar un
      numero suelto que no le dice nada a nadie. */
-  if(tip && min!=null){
+  if(!hoyAbierta){
+    $("#pRitmo").textContent =
+      `Hoy la báscula se usó ${ev.length} ${ev.length===1?"vez":"veces"}. `+
+      `Vuelve a abrir a las ${HORA_ABRE}:00.`;
+  } else if(tip && min!=null){
     $("#pRitmo").textContent = (min < uLenta)
       ? `Hoy la báscula se usa cada ${tip} min más o menos. Va en ritmo.`
       : `Hoy la báscula se usa cada ${tip} min más o menos, y lleva ${hace(min).replace("hace ","")} sin usarse.`;
@@ -1099,7 +1191,8 @@ function pintarFeed(){
      dos pesadas del mismo boleto se veia como si estuviera repetido. */
   const items=[];
   S.dia.forEach(r=>{ const t=r.salida||r.entrada; if(t) items.push({t, abierta:false, r}); });
-  (S.patio||[]).forEach(c=>{ if(c.entrada) items.push({t:c.entrada, abierta:true, r:c}); });
+  (S.patio||[]).forEach(c=>{ if(c.entrada && diaDe(c.entrada)===S.fecha)
+    items.push({t:c.entrada, abierta:true, r:c}); });
   items.sort((a,b)=>String(b.t).localeCompare(String(a.t)));
   const ev=items.slice(0,FEED_N);
 
@@ -1167,9 +1260,28 @@ function pintarHoy(){
 
   const ult = S.dia.slice().sort((a,b)=>String(b.salida||b.entrada||"").localeCompare(String(a.salida||a.entrada||"")))[0];
   if(ult){
-    $("#kUlt").textContent = nNum(ult.boleto);
+    $("#kUlt").textContent = nBoleto(ult.boleto);   // folio, no cantidad: sin coma de millares
     $("#kUltDet").textContent = (ult.procedencia||"—")+" · "+hhmm(ult.salida||ult.entrada);
   } else { $("#kUlt").textContent="—"; $("#kUltDet").textContent="sin movimiento"; }
+
+  /* Hoy en ceros no es una falla, pero sin contexto lo parece. Esta linea
+     sale solo en ese caso y dice de cuando fue el ultimo movimiento. */
+  const ref=$("#kRef");
+  if(ref){
+    if(S.dia.length || !S.ultimoDia){ ref.style.display="none"; ref.innerHTML=""; }
+    else {
+      const d=S.resumen[S.ultimoDia]||{}, p=d.planta||{};
+      const fu=new Date(S.ultimoDia+"T12:00:00");
+      const cuando=fu.toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"});
+      const cuanto = (p.kg!=null && p.viajes!=null)
+        ? ` con <b>${nTon(p.kg)} t</b> en ${p.viajes} ${p.viajes===1?"viaje":"viajes"}`
+        : "";
+      ref.innerHTML = `Hoy todavía no cierra ningún boleto. `+
+        `El último día con movimiento fue el <b>${cuando}</b>${cuanto}.`+
+        (S.patio.length ? ` Ahorita hay ${S.patio.length} ${S.patio.length===1?"camión":"camiones"} en el patio, abajo.` : "");
+      ref.style.display="block";
+    }
+  }
 
   // fuera del total, pero visibles
   const cajaO=$("#otros");
@@ -1311,8 +1423,13 @@ function pintarPatio(){
   const filas=S.patio.slice().sort((a,b)=>(b.minutos_en_patio||0)-(a.minutos_en_patio||0));
   caja.innerHTML='<div class="patio-lista">'+filas.map(c=>{
     const m=c.minutos_en_patio;
-    const cls = m>=PATIO_ALERTA ? "alerta" : m>=PATIO_AVISO ? "aviso" : "";
-    const ic  = m>=PATIO_ALERTA ? "▲ " : m>=PATIO_AVISO ? "• " : "";
+    /* El semaforo mide tiempo UTIL: un camion que entro a las 18:50 y
+       sigue ahi a las 7:05 no lleva 12 horas detenido, lleva 5 minutos
+       de bascula abierta. Alarmar ahi seria ruido. */
+    const mAb = c.entrada ? minsAbiertos(c.entrada) : null;
+    const base = (mAb!=null && !isNaN(mAb)) ? mAb : m;
+    const cls = base>=PATIO_ALERTA ? "alerta" : base>=PATIO_AVISO ? "aviso" : "";
+    const ic  = base>=PATIO_ALERTA ? "▲ " : base>=PATIO_AVISO ? "• " : "";
     /* Del camion en patio ya se sabe su PRIMERA pesada. Mostrarla es lo
        util: el neto todavia no existe porque falta la de salida. */
     const pe = c.peso_entrada!=null ? c.peso_entrada : c.bruto;
@@ -1322,7 +1439,8 @@ function pintarPatio(){
     if(c.placas) ident.push("placas "+esc(c.placas));
     ident.push("boleto "+nBoleto(c.boleto));
     return `<div class="camion ${cls}">
-      <div class="pl">${hhmm(c.entrada)}<small>entró</small></div>
+      <div class="pl">${hhmm(c.entrada)}<small>${
+        diaDe(c.entrada)===S.fecha ? "entró" : "entró "+fechaCorta(c.entrada)}</small></div>
       <div class="meta">
         <span class="deDonde">
           <span class="chip" style="background:${planta?fondoChip(c.grupo):"var(--muted)"}"></span>
@@ -1332,7 +1450,7 @@ function pintarPatio(){
         <span class="pesada">${pe!=null
           ? `1ª pesada <b>${nTon(pe)} t</b> · falta la de salida`
           : `1ª pesada sin peso registrado`}</span></div>
-      <div class="tiempo">${ic}${m==null?"—":m+" min"}</div>
+      <div class="tiempo">${ic}${tiempoPatio(m, mAb)}</div>
     </div>`;
   }).join("")+'</div>';
 }
@@ -1951,14 +2069,25 @@ async function cargar(){
   const [salud, resumen, patio] = await Promise.all([traer("/salud"), traer("/resumen"), traer("/patio")]);
   S.salud=salud; S.resumen=resumen||{}; S.patio=(patio&&patio.camiones)||[];
 
-  // si hoy no hay nada todavia, muestra el ultimo dia con movimiento
-  const dias=Object.keys(S.resumen).sort();
-  S.fecha = S.resumen[hoyISO()] ? hoyISO() : (dias[dias.length-1] || hoyISO());
+  /* CORTE DIARIO. "Hoy" es hoy, siempre, aunque todavia no haya pesadas.
+     Antes, si hoy venia vacio, se caia al ultimo dia con movimiento; pero
+     el patio es de ESTE momento, asi que la pantalla terminaba mezclando
+     boletos de antier con camiones de ahorita y salia un "hace 43 horas"
+     junto a un "hace 5 minutos". Si hoy no hay nada cerrado se dice tal
+     cual y abajo queda la referencia del ultimo dia con movimiento. */
+  S.fecha = hoyISO();
+  const previos = Object.keys(S.resumen).sort().filter(d => d < S.fecha);
+  S.ultimoDia = previos.length ? previos[previos.length-1] : null;
 
   const pack = await traer("/boletos/"+S.fecha);
   S.dia = pack ? Object.values(pack) : [];
 
-  if(!$("#fDesde").value){ $("#fDesde").value=S.fecha; $("#fHasta").value=S.fecha;
+  /* El Detalle es otra cosa: ahi se anda buscando, no vigilando. Si hoy
+     viene vacio arranca en el ultimo dia con movimiento para que no abra
+     en blanco. De ahi en adelante manda lo que elija el usuario. */
+  if(!$("#fDesde").value){
+    const arranque = S.dia.length ? S.fecha : (S.ultimoDia || S.fecha);
+    $("#fDesde").value=arranque; $("#fHasta").value=arranque;
     if(typeof sincroFechas==="function") sincroFechas(); }
 
   sello(); pintarHoy(); pintarPatio();
