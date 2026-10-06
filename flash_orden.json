@@ -1,15 +1,16 @@
 {
-  "_nota": "V3.9: dos candados (solo TI-00023, solo desde la tarea) y el estado de Dropbox cada 15 min en vez de cada 3, salvo que pase algo que amerite avisar al momento.",
-  "id": "v39-candados",
+  "_nota": "V4.0: campañas (lotes). El agente lee /campanas de Firebase, le pone a cada boleto su número de lote y agrega por_lote al resumen del día. Si /campanas no existe, se comporta igual que la V3.9. Los candados y el ritmo del estado no cambian.",
+  "id": "v40-campanas",
   "carga_dias": 0,
   "config": {
     "dias_hacia_atras": 2,
     "equipo_esperado": "TI-00023",
     "solo_tarea": true,
-    "estado_cada_min": 15
+    "estado_cada_min": 15,
+    "campanas": true
   },
   "actualizar": {
-    "sha256": "08e42e7c694e169f362bce2579856b21e7a920277cebbaab3e66258676222b70",
+    "sha256": "fd6487aa36c9af3513d054bf2dc029def34fbba3721506bc0683d955e5ab5d3d",
     "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }

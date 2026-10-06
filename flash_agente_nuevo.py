@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-FLASH DE ACARREO - Agente V3
+FLASH DE ACARREO - Agente V4
 Minera Rio Tinto - Bascula Cieneguita, Urique, Chihuahua
 
 Lee los WebServices JSON de RevueltaSIP (puerto 8060, solo lectura) y empuja
@@ -21,6 +21,13 @@ Por eso:
 Idempotencia: cada boleto se escribe en Firebase con su NUMERO DE BOLETO como
 llave (PUT, no POST). Correr esto cien veces sobre el mismo rango no duplica
 un solo registro.
+
+V4.0 - Campanas (lotes)
+  Lee /campanas de Firebase y le pone a cada boleto el numero de lote al que
+  pertenece, y al resumen del dia un desglose por lote. Es LECTURA de Firebase
+  y escritura de un campo mas: Revuelta no se toca, el webservice se consulta
+  igual que siempre y si /campanas no existe o viene mal, el agente trabaja
+  exactamente como la V3.9. La regla de no interferir con bascula se mantiene.
 """
 
 import hashlib
@@ -36,7 +43,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "3.9"
+VERSION = "4.0"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -64,7 +71,8 @@ CONFIG_DEFAULT = {
     "timeout_orden": 8,
     "equipo_esperado": "",
     "solo_tarea": False,
-    "estado_cada_min": 0
+    "estado_cada_min": 0,
+    "campanas": True
 }
 
 # Nombres de los dos archivos del puente de Dropbox
@@ -432,6 +440,25 @@ def firebase_patch(rutas):
         headers={"Content-Type": "application/json; charset=utf-8"})
     with urllib.request.urlopen(req, timeout=max(30, CFG["timeout_firebase"])) as resp:
         return resp.status in (200, 204)
+
+
+def firebase_get(ruta):
+    """Lectura simple de Firebase. Se usa solo para /campanas.
+
+    Falla en silencio a proposito: si no hay internet o la rama no existe,
+    devuelve None y el agente sigue su corrida normal sin lotes. Nunca
+    detiene el envio de boletos por esto.
+    """
+    url = "%s/%s.json" % (CFG["firebase_url"].rstrip("/"), ruta.strip("/"))
+    if CFG.get("firebase_auth"):
+        url += "?auth=" + CFG["firebase_auth"]
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=CFG["timeout_firebase"]) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        log("No se pudo leer %s de Firebase: %s" % (ruta, e), "WARN")
+        return None
 
 
 def firebase_put(ruta, payload):
@@ -1038,6 +1065,70 @@ def es_planta(producto):
     return any(p.startswith(x) for x in PRODUCTOS_PLANTA)
 
 
+# --------------------------------------------------------------------------
+# Campanas (lotes)
+# --------------------------------------------------------------------------
+# Una campana no guarda sus camiones: guarda DONDE EMPIEZA. El lote 24 de
+# Cerro Blanco es "todos los boletos de Cerro Blanco del 27-sep 07:15 en
+# adelante, hasta que empiece el 25". Por eso el arranque se guarda como un
+# MOMENTO y no como un folio: el folio es de toda la bascula y es casualidad
+# que caiga justo en el primer camion de una procedencia.
+#
+# Aqui no se decide nada. Lo que se decide vive en /campanas, que lo escribe
+# el panel. Esto nada mas aplica la regla y deja el numero puesto.
+
+CAMPANAS = {}          # grupo -> [(desde_iso, numero), ...] del mas nuevo al mas viejo
+
+
+def cargar_campanas():
+    """Trae /campanas y la deja lista para consultar. Devuelve cuantos lotes
+    quedaron cargados. Cualquier cosa rara se ignora en silencio: mas vale
+    un boleto sin lote que una corrida detenida."""
+    global CAMPANAS
+    CAMPANAS = {}
+    if not CFG.get("campanas", True):
+        return 0
+    datos = firebase_get("campanas")
+    if not isinstance(datos, dict):
+        return 0
+    total = 0
+    for grupo, cuerpo in datos.items():
+        if grupo.startswith("_") or not isinstance(cuerpo, dict):
+            continue
+        lotes = cuerpo.get("lotes")
+        if not isinstance(lotes, dict):
+            continue
+        filas = []
+        for clave, lote in lotes.items():
+            if not isinstance(lote, dict):
+                continue
+            desde = lote.get("desde")
+            if not isinstance(desde, str) or len(desde) < 10:
+                continue
+            try:
+                numero = int(lote.get("numero", clave))
+            except Exception:
+                continue
+            filas.append((desde, numero))
+        if filas:
+            filas.sort(reverse=True)      # el arranque mas reciente, primero
+            CAMPANAS[grupo] = filas
+            total += len(filas)
+    return total
+
+
+def lote_de(grupo, entrada):
+    """A que lote pertenece este boleto. None si esa procedencia no lleva
+    campanas, o si el camion entro antes de que empezara la primera."""
+    filas = CAMPANAS.get(grupo or "")
+    if not filas or not entrada:
+        return None
+    for desde, numero in filas:
+        if entrada >= desde:
+            return numero
+    return None
+
+
 def _acumular(dest, llave, registro):
     a = dest.setdefault(llave or "SIN DATO", {"viajes": 0, "kg": 0})
     a["viajes"] += 1
@@ -1057,6 +1148,16 @@ def armar_resumen(fecha_k, registros):
         _acumular(por_producto, (r.get("producto") or "SIN PRODUCTO").upper(), r)
     for r in planta:
         _acumular(planta_grupo, r.get("grupo") or "SIN PROCEDENCIA", r)
+
+    # Desglose por lote: solo de lo que va a planta, que es lo que cuenta
+    # para una campana. Queda vacio mientras nadie defina campanas.
+    por_lote = {}
+    for r in planta:
+        numero = r.get("lote")
+        if numero is None:
+            continue
+        grupo = r.get("grupo") or "SIN PROCEDENCIA"
+        _acumular(por_lote.setdefault(grupo, {}), str(numero), r)
     for r in otros:
         _acumular(otros_grupo, r.get("grupo") or "SIN PROCEDENCIA", r)
 
@@ -1072,6 +1173,7 @@ def armar_resumen(fecha_k, registros):
         "planta_por_grupo": planta_grupo,
         "no_planta_por_grupo": otros_grupo,
         "por_grupo": por_grupo,          # se conserva: el visor viejo lo usa
+        "por_lote": por_lote,            # V4.0: {grupo: {numero_de_lote: {viajes, kg}}}
         "actualizado": datetime.now().isoformat(timespec="seconds"),
     }
 
@@ -1152,6 +1254,42 @@ def main():
             n_dias = pedido
             log("CARGA HISTORICA pedida desde Dropbox: %d dias (orden '%s')" % (pedido, ident))
 
+    # ---- campanas ----
+    # Se leen UNA vez por corrida. Si no hay internet o la rama no existe,
+    # n_campanas queda en 0 y todo sigue igual que en la V3.9.
+    # Cinturon y tirantes: firebase_get ya atrapa sus errores, pero esto es
+    # la PC de bascula. Ninguna novedad de las campanas puede tumbar el
+    # envio de boletos, que es para lo que existe el agente.
+    try:
+        n_campanas = cargar_campanas()
+    except Exception as e:
+        log("Campanas: no se pudieron cargar (%s). Corrida sin lotes." % e, "WARN")
+        CAMPANAS.clear()
+        n_campanas = 0
+    if n_campanas:
+        log("Campanas: %d lote(s) en %d procedencia(s)" % (n_campanas, len(CAMPANAS)))
+
+    # Cuando alguien mueve el arranque de un lote hacia atras, los dias viejos
+    # ya tienen su resumen escrito sin ese lote. El panel lo pide escribiendo
+    # /campanas/_recalcular y aqui se atiende UNA sola vez por 'id'.
+    recalculo = None
+    if CFG.get("campanas", True):
+        try:
+            pedido_rec = firebase_get("campanas/_recalcular")
+        except Exception as e:
+            log("No se pudo leer el recalculo: %s" % e, "WARN")
+            pedido_rec = None
+        if isinstance(pedido_rec, dict):
+            ident = "recalc-" + str(pedido_rec.get("id") or "")
+            try:
+                dias_rec = int(pedido_rec.get("dias") or 0)
+            except Exception:
+                dias_rec = 0
+            if dias_rec > 0 and not orden_ya_hecha(ident):
+                recalculo = ident
+                n_dias = max(n_dias, min(dias_rec, 400))
+                log("RECALCULO pedido desde el panel: %d dias (%s)" % (dias_rec, ident))
+
     dias = [hoy - timedelta(days=i) for i in range(0, n_dias + 1)]
 
     total_cerrados = 0
@@ -1168,6 +1306,13 @@ def main():
         for c in crudos:
             r = normalizar(c, abierto=False)
             if r:
+                # El lote se calcula, no se captura. Si esa procedencia no
+                # lleva campanas queda en None y Firebase borra el campo,
+                # asi que un cambio de campana se limpia solo al reprocesar.
+                try:
+                    r["lote"] = lote_de(r.get("grupo"), r.get("entrada"))
+                except Exception:
+                    r["lote"] = None
                 registros.append(r)
         for r in registros:
             enviar("boletos/%s/%d" % (fecha_k, r["boleto"]), r)
@@ -1210,6 +1355,10 @@ def main():
                     r["minutos_en_patio"] = espera if 0 <= espera < 60 * 48 else None
                 except Exception:
                     pass
+            try:
+                r["lote"] = lote_de(r.get("grupo"), r.get("entrada"))
+            except Exception:
+                r["lote"] = None
             patio.append(r)
         patio.sort(key=lambda x: x.get("entrada") or "")
         # el patio es una foto del momento: se reemplaza completo, no se acumula
@@ -1221,6 +1370,10 @@ def main():
         log("Patio: %d camion(es) abiertos" % len(patio))
     else:
         log("Flash_Patio no respondio o no esta configurado todavia.", "WARN")
+
+    if recalculo:
+        marcar_orden(recalculo)
+        log("RECALCULO terminado sobre %d dias." % len(dias))
 
     if carga:
         marcar_orden(carga)
@@ -1245,6 +1398,8 @@ def main():
         "peticiones_firebase": ENVIADOS[1],
         "dias_revisados": len(dias),
         "carga_historica": carga or None,
+        "lotes_cargados": n_campanas,
+        "recalculo": recalculo or None,
         "version_pendiente": version_nueva,
         "carpeta": BASE,
     }
