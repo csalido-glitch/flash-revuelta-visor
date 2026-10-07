@@ -2,7 +2,7 @@
 <!-- ====================================================================
      FLASH DE ACARREO - VISOR
      Bascula Cieneguita - Urique, Chihuahua
-     Version V18   (02-oct-2026)
+     Version V19   (7-oct-2026) — inicio de sesion, campanas y usuarios
      El numero va amarrado a la carpeta de entrega, no a un conteo aparte.
      Al modificar este archivo, sube la version aqui y en VISOR_VERSION.
      ==================================================================== -->
@@ -549,9 +549,60 @@ td .recorta.media  { max-width:146px; }
        border:1px solid var(--axis); border-radius:8px; padding:8px 11px;
        font-size:12px; box-shadow:var(--shadow); font-variant-numeric:tabular-nums; }
 #tip b { display:block; font-size:13px; margin-bottom:2px; }
+
+/* ---------- V19: inicio de sesion, campanas y usuarios ---------- */
+#login{position:fixed;inset:0;z-index:100;background:var(--plane);display:flex;align-items:center;justify-content:center;padding:16px}
+#login .caja{width:100%;max-width:390px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:22px}
+#login h2{margin:0 0 4px;font-size:18px;color:var(--ink)}
+#login .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+#login .campo{margin-bottom:12px}
+#login .campo input{width:100%}
+#login .acciones{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.btn.pri{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn.pri:hover{color:#fff;filter:brightness(1.15)}
+.linkbtn{background:none;border:0;color:var(--s1);font:inherit;font-size:13px;cursor:pointer;padding:2px}
+#lMsg{font-size:13px;min-height:18px;margin-top:10px;color:var(--ink-2)}
+#lMsg.bad{color:var(--critical)} #lMsg.ok{color:var(--good)}
+.usuario{font-size:12px;color:var(--muted);white-space:nowrap}
+.cp-avance{height:8px;background:var(--grid);border-radius:4px;overflow:hidden;margin-top:4px;min-width:90px}
+.cp-avance i{display:block;height:100%;background:var(--s1)} .cp-avance i.lleno{background:var(--gold)}
+.pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;font-weight:700}
+.pill.azul{background:color-mix(in srgb,var(--s1) 14%,transparent);color:var(--s1)}
+.pill.oro{background:color-mix(in srgb,var(--gold) 22%,transparent);color:var(--gold-ink)}
+.cpchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.cpchip{border:1px dashed var(--axis);border-radius:16px;padding:4px 12px;font-size:13px;background:var(--plane);cursor:pointer;color:var(--ink)}
+.cpchip:hover{border-color:var(--gold)}
+#p-campanas td,#p-usuarios td{vertical-align:top}
+.forma{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:start}
+.forma .campo input,.forma .campo select{width:100%}
+.forma .chk input{width:auto !important;margin:0;flex:none}
+.forma .chk{flex-direction:row !important;justify-content:flex-start !important;align-items:center;gap:8px !important}
+.forma .chk{justify-content:flex-start;margin-top:4px;display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink-2);text-transform:none;letter-spacing:0;font-weight:400}
+.nota{font-size:12px;color:var(--muted);min-height:16px}
+.nota.ok{color:var(--good)} .nota.bad{color:var(--critical)}
+td.wrap{white-space:normal}
+.fila-ed td{background:var(--plane)}
+.log div{border-bottom:1px solid var(--grid);padding:6px 0;font-size:13px}
+details summary{cursor:pointer}
 </style>
 </head>
 <body data-palette="#2a78d6,#eb6834,#1baf7a,#eda100,#e87ba4">
+
+<div id="login" class="oculto">
+  <div class="caja">
+    <h2>Flash de Acarreo</h2>
+    <p class="sub">Entra con tu correo @mrtcorporativo.mx</p>
+    <div class="campo"><label for="lCorreo">Correo</label><input id="lCorreo" type="email" autocomplete="username" placeholder="nombre@mrtcorporativo.mx"></div>
+    <div class="campo"><label for="lClave">Contraseña</label><input id="lClave" type="password" autocomplete="current-password"></div>
+    <div class="campo oculto" id="lClave2c"><label for="lClave2">Repite la contraseña</label><input id="lClave2" type="password" autocomplete="new-password"></div>
+    <div class="acciones">
+      <button class="btn pri" id="lEntrar">Entrar</button>
+      <button class="linkbtn" id="lCrear">Es mi primera vez: crear mi contraseña</button>
+      <button class="linkbtn" id="lOlvide">Olvidé mi contraseña</button>
+    </div>
+    <div id="lMsg"></div>
+  </div>
+</div>
 
 <div class="banner-mrt">
   <div class="lienzo">
@@ -569,9 +620,13 @@ td .recorta.media  { max-width:146px; }
       <button class="tab" role="tab" aria-selected="false" data-t="patio">En patio<span class="badge" id="bPatio">0</span></button>
       <button class="tab" role="tab" aria-selected="false" data-t="detalle">Detalle</button>
       <button class="tab" role="tab" aria-selected="false" data-t="historico">Histórico</button>
+      <button class="tab oculto" role="tab" aria-selected="false" data-t="campanas">Campañas</button>
+      <button class="tab oculto" role="tab" aria-selected="false" data-t="usuarios">Usuarios</button>
     </nav>
     <div class="spacer"></div>
     <div id="seal" class="seal"><span class="dot"></span><span id="sealTxt">Conectando…</span></div>
+    <span class="usuario" id="uCorreo"></span>
+    <button class="btn" id="bSalir" title="Cerrar sesión en este dispositivo">Salir</button>
     <button class="btn" id="tema" title="Cambiar entre claro y oscuro">Modo oscuro</button>
   </div>
 </header>
@@ -748,10 +803,61 @@ td .recorta.media  { max-width:146px; }
     </div>
   </section>
 
+  <!-- ================= CAMPANAS (V19, solo gestores) ================= -->
+  <section id="p-campanas" class="oculto">
+    <div class="card">
+      <h2>Campañas vigentes</h2>
+      <p class="sub">Al superar el tope, el agente cierra la campaña y abre la siguiente en el boleto siguiente de esa procedencia. El camión que cruza el tope entra completo.</p>
+      <div class="tabla-caja"><table><thead><tr><th>Procedencia</th><th>Campaña</th><th>Inicia en</th><th class="num">Tope (t)</th><th class="num">Acumulado (t)</th><th>Avance</th><th>Siguiente campaña</th><th></th></tr></thead><tbody id="cpVig"></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>Asignar campaña</h2>
+      <p class="sub">Para una procedencia nueva o para abrir la siguiente de una existente.</p>
+      <div class="forma">
+        <div class="campo"><label>Procedencia</label><select id="cpProc"></select><div class="nota" id="cpProcN"></div></div>
+        <div class="campo"><label>Número de campaña</label><input id="cpNum" type="number" min="1"></div>
+        <div class="campo"><label>Inicia en boleto</label><input id="cpBol" inputmode="numeric" placeholder="ej. 200341"><div class="nota" id="cpBolN"></div></div>
+        <div class="campo"><label>Tope de referencia (t)</label><input id="cpTope" type="number" step="0.001" min="0" placeholder="ej. 530"></div>
+        <div class="campo" style="grid-column:1/-1"><label>Motivo</label><input id="cpMot" placeholder="ej. Arranque de campaña acordado con planta"></div>
+        <div><button class="btn pri" id="cpGuardar">Guardar campaña</button></div>
+      </div>
+      <div class="nota" id="cpMsg"></div>
+    </div>
+    <div class="card">
+      <h2>Procedencias sin campaña</h2>
+      <p class="sub">Clic en cualquiera para asignarle campaña.</p>
+      <div class="campo"><label>Mineral y jal</label></div><div class="cpchips" id="cpSin"></div>
+      <div class="campo" style="margin-top:14px"><label>Otros productos (no mineral) y procedencias nuevas</label></div><div class="cpchips" id="cpOtros"></div>
+    </div>
+    <div class="card"><details><summary><b>Registro de cambios</b> <span class="nota">(no se puede borrar)</span></summary><div class="log" id="cpLog"></div></details></div>
+  </section>
+
+  <!-- ================= USUARIOS (V19, solo quien gestiona usuarios) ================= -->
+  <section id="p-usuarios" class="oculto">
+    <div class="card">
+      <h2>Usuarios autorizados</h2>
+      <p class="sub">Solo entran los correos de esta lista. Quitar a alguien le cierra el acceso al instante.</p>
+      <div class="tabla-caja"><table><thead><tr><th>Correo</th><th>Consulta</th><th>Gestiona usuarios</th><th>Gestiona campañas</th><th>Alta</th><th></th></tr></thead><tbody id="usLista"></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>Agregar usuario</h2>
+      <p class="sub">Solo correos @mrtcorporativo.mx. La persona entra con «Es mi primera vez» y crea su contraseña.</p>
+      <div class="forma">
+        <div class="campo"><label>Correo</label><input id="usCorreo" type="email" placeholder="nombre@mrtcorporativo.mx"></div>
+        <div><div class="campo"><label>Permisos</label></div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usU"> Gestiona usuarios</label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usC"> Gestiona campañas</label></div>
+        <div><button class="btn pri" id="usAgregar">Agregar</button></div>
+      </div>
+      <div class="nota" id="usMsg"></div>
+    </div>
+    <div class="card"><details><summary><b>Registro de cambios</b></summary><div class="log" id="usLog"></div></details></div>
+  </section>
+
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V18 · 02-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19 · 7-oct-2026)</span>
   </p>
 </div>
 
@@ -768,7 +874,7 @@ const DB = "https://flash-revuelta-mrt-csalido-default-rtdb.firebaseio.com";
 // Lo que NO es acarreo de mineral. Se muestra aparte, nunca dentro del total.
 const NO_MINERAL = ["GRAVARENA", "DIESEL"];
 
-const VISOR_VERSION = "18";    // mismo numero que la carpeta de entrega; sale al pie
+const VISOR_VERSION = "19";    // mismo numero que la carpeta de entrega; sale al pie
 const REFRESCO_MS   = 30000;  // cada cuanto relee Firebase
 const FRESCO_MIN    = 10;     // verde  hasta aqui
 const TIBIO_MIN     = 30;     // ambar  hasta aqui, despues rojo
@@ -835,13 +941,368 @@ const heroFit = (el, txt) => { el.innerHTML=txt;
 const esc  = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const esMineral = g => !NO_MINERAL.includes(String(g||"").toUpperCase());
 
-async function traer(ruta){
+/* ===================================================================
+   V19 · INICIO DE SESION
+   Firebase Authentication por REST (sin librerias, igual que el resto).
+   Entra solo quien este en /autorizados. Cada quien crea su contrasena
+   la primera vez y confirma su correo con un enlace. La sesion se
+   recuerda en el dispositivo.
+   =================================================================== */
+const API_KEY = "AIzaSyBlBC2CJYkAmnVTiAQV6lSIQRHmbLzSMb8";   // Firebase > Configuracion del proyecto > General > Clave de API web
+const DOMINIO = "@mrtcorporativo.mx";
+const LS_SESION = "flash-acarreo-sesion";
+const AUTH = { idToken:null, exp:0, refresh:null, email:null, perm:null };
+const MES3 = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const fechaCorta2 = d => d.getDate()+"-"+MES3[d.getMonth()]+"-"+String(d.getFullYear()).slice(2);
+const llaveCorreo = e => String(e||"").trim().toLowerCase().replace(/\./g, ",");
+/* Firebase no acepta . # $ [ ] / en una llave. El agente usa la misma regla. */
+const claveFb = t => String(t||"SIN PROCEDENCIA").replace(/[.#$\[\]\/]/g, "_");
+
+function sesionGuardar(){ try{ localStorage.setItem(LS_SESION, JSON.stringify({refresh:AUTH.refresh, email:AUTH.email})); }catch(e){} }
+function sesionLeer(){ try{ return JSON.parse(localStorage.getItem(LS_SESION)||"null"); }catch(e){ return null; } }
+function sesionBorrar(){ try{ localStorage.removeItem(LS_SESION); }catch(e){} }
+
+const IDT = m => "https://identitytoolkit.googleapis.com/v1/accounts:"+m+"?key="+API_KEY;
+async function idt(url, body){
+  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error((j.error && j.error.message) || ("HTTP "+r.status));
+  return j;
+}
+function tomarToken(j){
+  AUTH.idToken = j.idToken || j.id_token;
+  AUTH.refresh = j.refreshToken || j.refresh_token || AUTH.refresh;
+  AUTH.exp = Date.now() + (Number(j.expiresIn || j.expires_in || 3600) - 120) * 1000;
+  if(j.email) AUTH.email = String(j.email).toLowerCase();
+  sesionGuardar();
+}
+async function token(){
+  if(AUTH.idToken && Date.now() < AUTH.exp) return AUTH.idToken;
+  if(!AUTH.refresh) return null;
   try{
-    const r = await fetch(DB+ruta+".json", {cache:"no-store"});
+    const r = await fetch("https://securetoken.googleapis.com/v1/token?key="+API_KEY, {method:"POST",
+      headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body:"grant_type=refresh_token&refresh_token="+encodeURIComponent(AUTH.refresh)});
+    if(!r.ok) return null;
+    tomarToken(await r.json());
+    return AUTH.idToken;
+  }catch(e){ return null; }
+}
+const ERRORES = {
+  EMAIL_NOT_FOUND: "Ese correo todavía no tiene contraseña. Usa «Es mi primera vez».",
+  INVALID_PASSWORD: "Contraseña incorrecta.",
+  INVALID_LOGIN_CREDENTIALS: "Correo o contraseña incorrectos. Si es tu primera vez, usa «Es mi primera vez».",
+  EMAIL_EXISTS: "Ese correo ya tiene contraseña. Usa «Entrar» u «Olvidé mi contraseña».",
+  TOO_MANY_ATTEMPTS_TRY_LATER: "Demasiados intentos. Espera unos minutos.",
+  USER_DISABLED: "Esta cuenta está desactivada.",
+  OPERATION_NOT_ALLOWED: "El acceso con correo no está activado en Firebase (paso B.2)."
+};
+const msgErr = e => ERRORES[e.message] || (String(e.message).startsWith("WEAK_PASSWORD")
+  ? "La contraseña debe tener al menos 8 caracteres." : "No se pudo: "+e.message);
+
+let MODO_CREAR = false;
+function lMsg(t, c){ const m=$("#lMsg"); m.innerHTML=t||""; m.className=c||""; }
+function mostrarLogin(t, c){ $("#login").classList.remove("oculto"); lMsg(t, c); }
+const correoValido = e => e.endsWith(DOMINIO) && e.length > DOMINIO.length;
+
+$("#lCrear").addEventListener("click", ()=>{
+  MODO_CREAR = !MODO_CREAR;
+  $("#lClave2c").classList.toggle("oculto", !MODO_CREAR);
+  $("#lEntrar").textContent = MODO_CREAR ? "Crear mi contraseña" : "Entrar";
+  $("#lCrear").textContent  = MODO_CREAR ? "Ya tengo contraseña: entrar" : "Es mi primera vez: crear mi contraseña";
+  lMsg("");
+});
+async function entrar(){
+  const e = $("#lCorreo").value.trim().toLowerCase(), p = $("#lClave").value;
+  if(!correoValido(e)) return lMsg("Usa tu correo "+DOMINIO, "bad");
+  if(MODO_CREAR){
+    if(p.length < 8) return lMsg("La contraseña debe tener al menos 8 caracteres.", "bad");
+    if(p !== $("#lClave2").value) return lMsg("Las dos contraseñas no coinciden.", "bad");
+  }
+  lMsg("Un momento…");
+  try{
+    const j = await idt(IDT(MODO_CREAR ? "signUp" : "signInWithPassword"), {email:e, password:p, returnSecureToken:true});
+    tomarToken(j);
+    if(MODO_CREAR) await idt(IDT("sendOobCode"), {requestType:"VERIFY_EMAIL", idToken:AUTH.idToken});
+    await despuesDeEntrar();
+  }catch(err){ lMsg(msgErr(err), "bad"); }
+}
+$("#lEntrar").addEventListener("click", entrar);
+$("#lClave").addEventListener("keydown", ev=>{ if(ev.key==="Enter" && !MODO_CREAR) entrar(); });
+$("#lOlvide").addEventListener("click", async ()=>{
+  const e = $("#lCorreo").value.trim().toLowerCase();
+  if(!correoValido(e)) return lMsg("Escribe tu correo arriba primero.", "bad");
+  try{
+    await idt(IDT("sendOobCode"), {requestType:"PASSWORD_RESET", email:e});
+    lMsg("Te enviamos un correo para cambiar tu contraseña. Revisa también la carpeta de spam.", "ok");
+  }catch(err){ lMsg(msgErr(err), "bad"); }
+});
+$("#bSalir").addEventListener("click", ()=>{ sesionBorrar(); location.reload(); });
+
+async function despuesDeEntrar(){
+  if(!(await token())){ sesionBorrar(); return mostrarLogin(""); }
+  let u = {};
+  try{ u = ((await idt(IDT("lookup"), {idToken:AUTH.idToken})).users || [])[0] || {}; }
+  catch(e){ return mostrarLogin("No se pudo validar la sesión ("+esc(e.message)+").", "bad"); }
+  if(u.email) AUTH.email = String(u.email).toLowerCase();
+  if(!u.emailVerified){
+    mostrarLogin("Te enviamos un correo para confirmar tu dirección. Ábrelo, da clic en el enlace y vuelve a dar «Entrar». Revisa también la carpeta de spam.<br><button class='linkbtn' id='lReenviar'>Reenviar el correo de confirmación</button>", "ok");
+    $("#lReenviar").addEventListener("click", async ()=>{
+      try{ await idt(IDT("sendOobCode"), {requestType:"VERIFY_EMAIL", idToken:AUTH.idToken}); lMsg("Correo reenviado.", "ok"); }
+      catch(err){ lMsg(msgErr(err), "bad"); }
+    });
+    if(MODO_CREAR) $("#lCrear").click();   // la siguiente vez ya es «Entrar»
+    return;
+  }
+  AUTH.exp = 0; await token();            // el permiso nuevo ya dice "correo confirmado"
+  const perm = await traer("/autorizados/"+llaveCorreo(AUTH.email));
+  if(!perm || !perm.consulta){
+    sesionBorrar(); AUTH.refresh = null; AUTH.idToken = null;
+    return mostrarLogin("Tu correo no está en la lista de autorizados. Pide acceso a César Salido o a JC.", "bad");
+  }
+  AUTH.perm = perm;
+  $("#login").classList.add("oculto");
+  $("#uCorreo").textContent = AUTH.email;
+  $$('.tab[data-t="campanas"]').forEach(b => b.classList.toggle("oculto", !perm.gestiona_campanas));
+  $$('.tab[data-t="usuarios"]').forEach(b => b.classList.toggle("oculto", !perm.gestiona_usuarios));
+  arrancar();
+}
+
+/* Lectura: igual que antes, ahora con el permiso de la sesion. */
+async function traer(ruta, extra){
+  try{
+    const t = await token();
+    const q = [t ? "auth="+encodeURIComponent(t) : "", extra||""].filter(Boolean).join("&");
+    const r = await fetch(DB+encodeURI(ruta)+".json"+(q ? "?"+q : ""), {cache:"no-store"});
     if(!r.ok) return null;
     return await r.json();
   }catch(e){ return null; }
 }
+/* Escritura (solo campanas y usuarios). Si las reglas lo niegan, se dice. */
+async function fb(metodo, ruta, cuerpo){
+  const t = await token();
+  if(!t) throw new Error("La sesión venció; vuelve a entrar.");
+  const r = await fetch(DB+encodeURI(ruta)+".json?auth="+encodeURIComponent(t), {method:metodo,
+    headers:{"Content-Type":"application/json"}, body: cuerpo===undefined ? undefined : JSON.stringify(cuerpo)});
+  if(!r.ok) throw new Error(r.status===401 ? "No tienes permiso para este cambio." : "Firebase respondió "+r.status+".");
+  return r.json();
+}
+const ahoraISO = () => new Date().toISOString();
+const idHist = () => "h-"+Date.now()+"-"+Math.random().toString(36).slice(2,6);
+
+/* ===================================================================
+   V19 · GESTOR DE CAMPANAS
+   El gestor dice DONDE EMPIEZA cada campana (boleto) y su tope. El agente
+   pone el lote a cada boleto y, al superar el tope, abre la siguiente en
+   el boleto siguiente de esa procedencia. Aqui se ve y se corrige.
+   =================================================================== */
+const CP = { datos:{}, mineral:new Set(), otros:new Set(), edit:null };
+const tTon = kg => (kg==null || isNaN(kg)) ? "—" : (kg/1000).toLocaleString("es-MX",{minimumFractionDigits:3, maximumFractionDigits:3});
+function lotesDe(cuerpo){
+  const l = (cuerpo && cuerpo.lotes) || {};
+  return Object.keys(l).map(k => Object.assign({numero:Number(k)}, l[k]))
+    .filter(x => !isNaN(x.numero)).sort((a,b) => b.numero - a.numero);
+}
+function acumLote(gk, n){
+  let kg = 0, viajes = 0;
+  Object.values(S.resumen || {}).forEach(d => {
+    const x = ((d && d.por_lote) || {})[gk]; const y = x && x[String(n)];
+    if(y){ kg += y.kg || 0; viajes += y.viajes || 0; }
+  });
+  return {kg, viajes};
+}
+function nombreDe(gk){ const c = CP.datos[gk]; return (c && c.procedencia) || gk; }
+async function buscarBoleto(folio){
+  /* El boleto se guarda por dia; se busca hacia atras hasta 45 dias, de 15 en 15. */
+  const hoy = new Date();
+  for(let base=0; base<45; base+=15){
+    const dias = [];
+    for(let i=base; i<base+15; i++){ const d=new Date(hoy); d.setDate(d.getDate()-i);
+      dias.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")); }
+    const res = await Promise.all(dias.map(f => traer("/boletos/"+f+"/"+folio)));
+    const i = res.findIndex(Boolean);
+    if(i >= 0) return Object.assign({fecha:dias[i]}, res[i]);
+  }
+  return null;
+}
+async function cargarCampanas(){
+  CP.datos = (await traer("/campanas")) || {};
+  CP.mineral = new Set(["EL REALITO"]); CP.otros = new Set(NO_MINERAL.concat(["CHATARRA"]));
+  Object.values(S.resumen || {}).forEach(d => {
+    Object.keys((d && d.planta_por_grupo) || {}).forEach(g => CP.mineral.add(g));
+    Object.keys((d && d.no_planta_por_grupo) || {}).forEach(g => CP.otros.add(g));
+  });
+  CP.mineral.forEach(g => CP.otros.delete(g));
+  pintarCampanas();
+}
+function pintarCampanas(){
+  const filas = [];
+  Object.keys(CP.datos).filter(k => !k.startsWith("_")).sort().forEach(gk => {
+    const lotes = lotesDe(CP.datos[gk]); if(!lotes.length) return;
+    const cur = lotes[0], a = acumLote(gk, cur.numero), tope = Number(cur.tope_kg) || 0;
+    const pct = tope ? Math.min(100, a.kg/tope*100) : 0, lleno = tope && a.kg > tope;
+    const inicio = cur.desde_boleto != null
+      ? `boleto <b>${nBoleto(cur.desde_boleto)}</b>${cur.auto ? '<div class="nota">abierta por el agente</div>' : ""}`
+      : `${esc(String(cur.desde||"").replace("T"," ").slice(0,16))}`;
+    let sig;
+    if(cur.siguiente_boleto) sig = `<span class="pill oro">Campaña ${cur.numero+1}</span> boleto <b>${nBoleto(cur.siguiente_boleto)}</b><div class="nota">indicado a mano</div>`;
+    else if(lleno) sig = `<span class="pill oro">Campaña ${cur.numero+1}</span><div class="nota">tope superado: el agente la abre en su siguiente corrida, en el boleto siguiente de esta procedencia</div>`;
+    else if(tope){ const prom = a.viajes ? a.kg/a.viajes : 15000, falta = tope - a.kg;
+      sig = `<div class="nota">faltan ${tTon(falta)} t · ~${Math.max(1, Math.ceil(falta/prom))} camiones</div><div class="nota">arrancará en el boleto siguiente al que cruce el tope</div>`; }
+    else sig = `<div class="nota">sin tope: no se cierra sola</div>`;
+    filas.push(`<tr><td class="wrap"><b>${esc(nombreDe(gk))}</b></td><td><span class="pill azul">${cur.numero}</span></td>
+      <td class="wrap">${inicio}</td><td class="num">${tope ? tTon(tope) : "—"}</td><td class="num">${tTon(a.kg)}</td>
+      <td>${tope ? pct.toFixed(0)+"%" : "—"}<div class="cp-avance"><i class="${lleno ? "lleno" : ""}" style="width:${pct}%"></i></div></td>
+      <td class="wrap">${sig}</td><td><button class="btn" data-ed="${esc(gk)}">Editar</button></td></tr>`);
+    if(CP.edit === gk) filas.push(`<tr class="fila-ed"><td colspan="8"><div class="forma">
+      <div class="campo"><label>Número de campaña</label><input id="eNum" type="number" min="1" value="${cur.numero}"></div>
+      <div class="campo"><label>Inicia en boleto</label><input id="eBol" inputmode="numeric" value="${cur.desde_boleto!=null ? cur.desde_boleto : ""}"></div>
+      <div class="campo"><label>Tope (t)</label><input id="eTope" type="number" step="0.001" min="0" value="${tope ? (tope/1000) : ""}"></div>
+      <div class="campo"><label>Boleto de la siguiente (opcional)</label><input id="eSig" inputmode="numeric" value="${cur.siguiente_boleto || ""}" placeholder="vacío = proyectado"></div>
+      <div class="campo" style="grid-column:1/-1"><label>Motivo del cambio (obligatorio)</label><input id="eMot"></div>
+      <div><button class="btn pri" id="eGuardar">Guardar cambio</button> <button class="btn" id="eCancelar">Cancelar</button> <button class="btn" id="eQuitar">Quitar campaña</button></div>
+      </div><div class="nota" id="eMsg"></div></td></tr>`);
+  });
+  $("#cpVig").innerHTML = filas.join("") || `<tr><td colspan="8" class="wrap">Ninguna procedencia tiene campaña todavía.</td></tr>`;
+  $$("#cpVig [data-ed]").forEach(b => b.addEventListener("click", () => { CP.edit = CP.edit===b.dataset.ed ? null : b.dataset.ed; pintarCampanas(); }));
+  if(CP.edit){
+    $("#eCancelar").addEventListener("click", () => { CP.edit = null; pintarCampanas(); });
+    $("#eGuardar").addEventListener("click", guardarEdicion);
+    $("#eQuitar").addEventListener("click", quitarCampana);
+  }
+  // selector y procedencias sin campana
+  const con = new Set(Object.keys(CP.datos).filter(k => lotesDe(CP.datos[k]).length));
+  const prev = $("#cpProc").value;
+  const opt = arr => arr.sort().map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("");
+  $("#cpProc").innerHTML = `<optgroup label="Mineral y jal">${opt([...CP.mineral])}</optgroup><optgroup label="Otros">${opt([...CP.otros])}</optgroup>`;
+  const sinM = [...CP.mineral].filter(g => !con.has(claveFb(g))).sort(), sinO = [...CP.otros].filter(g => !con.has(claveFb(g))).sort();
+  $("#cpProc").value = prev && [...CP.mineral, ...CP.otros].includes(prev) ? prev : (sinM[0] || [...CP.mineral][0] || "");
+  const chip = g => `<span class="cpchip" data-g="${esc(g)}">${esc(g)}${g==="EL REALITO" ? ' <span class="nota">(no lleva por ahora)</span>' : ""}</span>`;
+  $("#cpSin").innerHTML = sinM.map(chip).join("") || '<span class="nota">Todas tienen campaña.</span>';
+  $("#cpOtros").innerHTML = sinO.map(chip).join("") || '<span class="nota">Ninguna.</span>';
+  $$("#cpSin .cpchip, #cpOtros .cpchip").forEach(c => c.addEventListener("click", () => { $("#cpProc").value = c.dataset.g; procElegida(); $("#cpBol").focus(); }));
+  procElegida();
+  // historial
+  const h = [];
+  Object.keys(CP.datos).filter(k => !k.startsWith("_")).forEach(gk => {
+    Object.values((CP.datos[gk] && CP.datos[gk].historial) || {}).forEach(x => h.push(Object.assign({g:nombreDe(gk)}, x)));
+  });
+  h.sort((a,b) => String(b.cuando).localeCompare(String(a.cuando)));
+  $("#cpLog").innerHTML = h.map(x => `<div><span class="nota">${esc(fechaCorta2(new Date(x.cuando)))} ${hhmm(x.cuando)} · ${esc(x.quien)}</span><br><b>${esc(x.g)}</b>: ${esc(x.que)}${x.motivo ? " · Motivo: "+esc(x.motivo) : ""}</div>`).join("") || '<div class="nota">Sin cambios todavía.</div>';
+}
+function procElegida(){
+  const g = $("#cpProc").value, lotes = lotesDe(CP.datos[claveFb(g)]);
+  $("#cpProcN").textContent = lotes.length ? `Ya tiene campaña ${lotes[0].numero}: se abre una nueva encima.` : "Sin campaña.";
+  $("#cpNum").value = lotes.length ? lotes[0].numero + 1 : 1;
+  $("#cpBolN").textContent = ""; $("#cpBolN").className = "nota";
+}
+async function validarBoleto(){
+  const v = parseInt($("#cpBol").value, 10), n = $("#cpBolN");
+  if(!v){ n.textContent = ""; n.className = "nota"; return null; }
+  n.textContent = "Buscando el boleto…"; n.className = "nota";
+  const b = await buscarBoleto(v);
+  if(!b){ n.textContent = "Aún no existe: la campaña arrancará cuando llegue."; n.className = "nota"; return {existe:false}; }
+  if(b.grupo !== $("#cpProc").value){ n.textContent = "Ese boleto es de "+b.grupo+"."; n.className = "nota bad"; return {existe:true, ajeno:true}; }
+  n.textContent = "✓ "+fechaCorta2(new Date(b.fecha+"T12:00:00"))+" "+hhmm(b.entrada)+" · "+tTon(b.neto)+" t"; n.className = "nota ok";
+  return {existe:true, fecha:b.fecha};
+}
+function diasDesde(fecha){ return fecha ? Math.max(1, Math.ceil((Date.now() - new Date(fecha+"T00:00:00"))/86400000) + 1) : 0; }
+async function guardarNueva(){
+  const g = $("#cpProc").value, gk = claveFb(g), n = parseInt($("#cpNum").value, 10), bol = parseInt($("#cpBol").value, 10);
+  const t = parseFloat($("#cpTope").value), mot = $("#cpMot").value.trim(), msg = $("#cpMsg");
+  if(!g || !n || !bol || !(t > 0) || !mot){ msg.textContent = "Completa número, boleto, tope y motivo."; msg.className = "nota bad"; return; }
+  const lotes = lotesDe(CP.datos[gk]);
+  if(lotes.length && n <= lotes[0].numero){ msg.textContent = `Ya existe la campaña ${lotes[0].numero}; para corregirla usa «Editar».`; msg.className = "nota bad"; return; }
+  const v = await validarBoleto();
+  if(v && v.ajeno){ msg.textContent = "El boleto no es de esa procedencia."; msg.className = "nota bad"; return; }
+  const cuando = ahoraISO(), cambios = {};
+  cambios[`campanas/${gk}/procedencia`] = g;
+  cambios[`campanas/${gk}/lotes/${n}`] = {numero:n, desde_boleto:bol, tope_kg:Math.round(t*1000), firma:{quien:AUTH.email, cuando}};
+  cambios[`campanas/${gk}/historial/${idHist()}`] = {cuando, quien:AUTH.email, que:`campaña ${n} desde boleto ${bol}, tope ${tTon(t*1000)} t`, motivo:mot};
+  if(v && v.fecha) cambios["campanas/_recalcular"] = {id:String(Date.now()), dias:diasDesde(v.fecha)};
+  try{ await fb("PATCH", "/", cambios); msg.textContent = "Guardado."; msg.className = "nota ok";
+       $("#cpBol").value = ""; $("#cpTope").value = ""; $("#cpMot").value = ""; await cargarCampanas(); }
+  catch(e){ msg.textContent = e.message; msg.className = "nota bad"; }
+}
+async function guardarEdicion(){
+  const gk = CP.edit, cur = lotesDe(CP.datos[gk])[0], m = $("#eMsg"), mot = $("#eMot").value.trim();
+  if(!mot){ m.textContent = "El motivo es obligatorio."; m.className = "nota bad"; return; }
+  const n = parseInt($("#eNum").value, 10), bol = parseInt($("#eBol").value, 10), t = parseFloat($("#eTope").value), sig = parseInt($("#eSig").value, 10) || null;
+  if(!n || !bol){ m.textContent = "Número y boleto son obligatorios."; m.className = "nota bad"; return; }
+  const nuevo = {numero:n, desde_boleto:bol, tope_kg:(t > 0 ? Math.round(t*1000) : null), siguiente_boleto:sig,
+                 firma:{quien:AUTH.email, cuando:ahoraISO()}};
+  const antes = {numero:cur.numero, desde_boleto:cur.desde_boleto ?? null, desde:cur.desde ?? null, tope_kg:cur.tope_kg ?? null, siguiente_boleto:cur.siguiente_boleto ?? null};
+  const cambios = {};
+  if(n !== cur.numero) cambios[`campanas/${gk}/lotes/${cur.numero}`] = null;
+  cambios[`campanas/${gk}/lotes/${n}`] = nuevo;
+  cambios[`campanas/${gk}/historial/${idHist()}`] = {cuando:ahoraISO(), quien:AUTH.email,
+    que:`edita campaña ${cur.numero} → ${n}: boleto ${bol}, tope ${t > 0 ? tTon(t*1000)+" t" : "sin tope"}${sig ? ", siguiente en "+sig : ""}`, motivo:mot, antes};
+  if(bol !== cur.desde_boleto || n !== cur.numero){
+    const b = await buscarBoleto(bol);
+    cambios["campanas/_recalcular"] = {id:String(Date.now()), dias: b ? diasDesde(b.fecha) : 31};
+  }
+  try{ await fb("PATCH", "/", cambios); CP.edit = null; await cargarCampanas(); }
+  catch(e){ m.textContent = e.message; m.className = "nota bad"; }
+}
+async function quitarCampana(){
+  const gk = CP.edit, m = $("#eMsg"), mot = $("#eMot").value.trim();
+  if(!mot){ m.textContent = "Escribe el motivo para quitarla."; m.className = "nota bad"; return; }
+  if(!confirm("¿Quitar todas las campañas de "+nombreDe(gk)+"? El registro de cambios se conserva.")) return;
+  const cambios = {};
+  cambios[`campanas/${gk}/lotes`] = null;
+  cambios[`campanas/${gk}/historial/${idHist()}`] = {cuando:ahoraISO(), quien:AUTH.email, que:"campaña retirada", motivo:mot};
+  cambios["campanas/_recalcular"] = {id:String(Date.now()), dias:31};
+  try{ await fb("PATCH", "/", cambios); CP.edit = null; await cargarCampanas(); }
+  catch(e){ m.textContent = e.message; m.className = "nota bad"; }
+}
+$("#cpProc").addEventListener("change", procElegida);
+$("#cpBol").addEventListener("change", validarBoleto);
+$("#cpGuardar").addEventListener("click", guardarNueva);
+
+/* ===================================================================
+   V19 · USUARIOS AUTORIZADOS
+   =================================================================== */
+async function cargarUsuarios(){
+  const lista = (await traer("/autorizados")) || {}, hist = (await traer("/autorizados_historial")) || {};
+  const filas = Object.keys(lista).sort((a,b) => String(lista[a].correo).localeCompare(String(lista[b].correo))).map(k => {
+    const u = lista[k], yo = u.correo === AUTH.email;
+    /* Las campanas son tema de operacion: quien no gestiona campanas no puede
+       dar ese permiso ni quitar a quien lo tiene (las reglas tambien lo impiden). */
+    const soyGC = !!(AUTH.perm && AUTH.perm.gestiona_campanas), protegido = u.gestiona_campanas && !soyGC;
+    const caja = (campo) => `<input type="checkbox" data-k="${esc(k)}" data-c="${campo}" ${u[campo] ? "checked" : ""} ${(yo || protegido || (campo==="gestiona_campanas" && !soyGC)) ? "disabled" : ""}>`;
+    return `<tr><td>${esc(u.correo)}${yo ? ' <span class="nota">(tú)</span>' : ""}</td><td>Sí</td>
+      <td>${caja("gestiona_usuarios")}</td><td>${caja("gestiona_campanas")}</td>
+      <td class="nota">${esc(u.alta||"")}</td><td>${(yo || protegido) ? "" : `<button class="btn" data-quitar="${esc(k)}">Quitar</button>`}</td></tr>`;
+  });
+  $("#usLista").innerHTML = filas.join("") || '<tr><td colspan="6">Sin usuarios.</td></tr>';
+  $$("#usLista input[type=checkbox]").forEach(c => c.addEventListener("change", async () => {
+    const k = c.dataset.k, cambios = {};
+    cambios[`autorizados/${k}/${c.dataset.c}`] = c.checked;
+    cambios[`autorizados_historial/${idHist()}`] = {cuando:ahoraISO(), quien:AUTH.email,
+      que:`${lista[k].correo}: ${c.dataset.c==="gestiona_usuarios" ? "gestiona usuarios" : "gestiona campañas"} = ${c.checked ? "sí" : "no"}`};
+    try{ await fb("PATCH", "/", cambios); await cargarUsuarios(); }catch(e){ $("#usMsg").textContent = e.message; $("#usMsg").className = "nota bad"; }
+  }));
+  $$("#usLista [data-quitar]").forEach(b => b.addEventListener("click", async () => {
+    const k = b.dataset.quitar; if(!confirm("¿Quitar a "+lista[k].correo+"? Deja de entrar al instante.")) return;
+    const cambios = {}; cambios[`autorizados/${k}`] = null;
+    cambios[`autorizados_historial/${idHist()}`] = {cuando:ahoraISO(), quien:AUTH.email, que:`${lista[k].correo}: quitado`};
+    try{ await fb("PATCH", "/", cambios); await cargarUsuarios(); }catch(e){ $("#usMsg").textContent = e.message; $("#usMsg").className = "nota bad"; }
+  }));
+  const h = Object.values(hist).sort((a,b) => String(b.cuando).localeCompare(String(a.cuando)));
+  $("#usC").disabled = !(AUTH.perm && AUTH.perm.gestiona_campanas);
+  $("#usLog").innerHTML = h.map(x => `<div><span class="nota">${esc(fechaCorta2(new Date(x.cuando)))} ${hhmm(x.cuando)} · ${esc(x.quien)}</span><br>${esc(x.que)}</div>`).join("") || '<div class="nota">Sin cambios todavía.</div>';
+}
+$("#usAgregar").addEventListener("click", async () => {
+  const e = $("#usCorreo").value.trim().toLowerCase(), m = $("#usMsg");
+  if(!correoValido(e)){ m.textContent = "Solo correos "+DOMINIO; m.className = "nota bad"; return; }
+  const k = llaveCorreo(e), cambios = {};
+  cambios[`autorizados/${k}`] = {correo:e, consulta:true, gestiona_usuarios:$("#usU").checked, gestiona_campanas:$("#usC").checked,
+                                 alta:fechaCorta2(new Date()), alta_por:AUTH.email};
+  cambios[`autorizados_historial/${idHist()}`] = {cuando:ahoraISO(), quien:AUTH.email, que:`${e}: agregado`};
+  try{ await fb("PATCH", "/", cambios); m.textContent = "Agregado. Avísale que entre con «Es mi primera vez»."; m.className = "nota ok";
+       $("#usCorreo").value = ""; $("#usU").checked = false; $("#usC").checked = false; await cargarUsuarios(); }
+  catch(err){ m.textContent = err.message; m.className = "nota bad"; }
+});
 
 /* ===================================================================
    ESTADO
@@ -974,7 +1435,9 @@ function pintarCasillas(caja, campos, set, clave, alCambiar, fijasTxt){
    =================================================================== */
 $$(".tab").forEach(b => b.addEventListener("click", ()=>{
   $$(".tab").forEach(x => x.setAttribute("aria-selected", x===b ? "true":"false"));
-  ["hoy","patio","historico","detalle"].forEach(t => $("#p-"+t).classList.toggle("oculto", t!==b.dataset.t));
+  ["hoy","patio","historico","detalle","campanas","usuarios"].forEach(t => $("#p-"+t).classList.toggle("oculto", t!==b.dataset.t));
+  if(b.dataset.t==="campanas") cargarCampanas();
+  if(b.dataset.t==="usuarios") cargarUsuarios();
   if(b.dataset.t==="detalle") cargarDetalle();
   if(b.dataset.t==="historico") pintarHistorico();
   if(b.dataset.t==="hoy") dibujarHoras();
@@ -2095,10 +2558,20 @@ async function cargar(){
   if(!$("#p-detalle").classList.contains("oculto")) cargarDetalle();
 }
 
-cargar();
-setInterval(cargar, REFRESCO_MS);
-setInterval(sello, 20000);
-setInterval(()=>{ if(!$("#p-hoy").classList.contains("oculto")){ pintarPulso(); pintarFeed(); } }, 15000);
+/* V19: nada se carga hasta que haya sesion y el correo este autorizado. */
+function arrancar(){
+  if(arrancar.ya) return; arrancar.ya = true;
+  cargar();
+  setInterval(cargar, REFRESCO_MS);
+  setInterval(sello, 20000);
+  setInterval(()=>{ if(!$("#p-hoy").classList.contains("oculto")){ pintarPulso(); pintarFeed(); } }, 15000);
+}
+(async ()=>{
+  if(API_KEY.startsWith("PEGAR")) return mostrarLogin("Falta pegar la Clave de API web en el archivo (API_KEY).", "bad");
+  const s = sesionLeer();
+  if(s && s.refresh){ AUTH.refresh = s.refresh; AUTH.email = s.email; await despuesDeEntrar(); }
+  else mostrarLogin("");
+})();
 addEventListener("resize", ()=>{ clearTimeout(window._rz);
   window._rz=setTimeout(()=>{ dibujarHoras();
     if(!$("#p-historico").classList.contains("oculto")) pintarHistorico(); }, 180); });
