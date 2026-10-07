@@ -28,6 +28,15 @@ V4.0 - Campanas (lotes)
   y escritura de un campo mas: Revuelta no se toca, el webservice se consulta
   igual que siempre y si /campanas no existe o viene mal, el agente trabaja
   exactamente como la V3.9. La regla de no interferir con bascula se mantiene.
+
+V4.1 - Campanas por boleto y cierre automatico por tope
+  Una campana ahora puede arrancar en un NUMERO DE BOLETO (desde_boleto),
+  ademas del momento de la V4.0. Al superar su tope (tope_kg), el agente
+  abre sola la siguiente: arranca en el boleto siguiente de esa procedencia
+  (el camion que cruza el tope entra completo). Si el gestor dejo indicado
+  el boleto de la siguiente (siguiente_boleto), se respeta ese. Cada apertura
+  automatica queda en el historial de la campana. Todo va envuelto: si algo
+  falla, los boletos se envian igual que en la V4.0.
 """
 
 import hashlib
@@ -43,7 +52,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.0"
+VERSION = "4.1"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -1077,15 +1086,38 @@ def es_planta(producto):
 # Aqui no se decide nada. Lo que se decide vive en /campanas, que lo escribe
 # el panel. Esto nada mas aplica la regla y deja el numero puesto.
 
-CAMPANAS = {}          # grupo -> [(desde_iso, numero), ...] del mas nuevo al mas viejo
+CAMPANAS = {}          # clave de grupo -> [lote, ...] del numero mas alto al mas bajo
+CAMPANA_DIAS_ATRAS = 120   # hasta donde se mira el resumen para sumar un lote
+_RESUMEN_PREVIO = {}       # cache de una sola corrida
+
+
+def clave_fb(texto):
+    """Firebase no acepta . # $ [ ] / en una llave. El visor usa la misma regla."""
+    t = str(texto or "SIN PROCEDENCIA")
+    for c in ".#$[]/":
+        t = t.replace(c, "_")
+    return t
+
+
+def _entero(v):
+    try:
+        if v is None or v == "":
+            return None
+        return int(float(v))
+    except Exception:
+        return None
 
 
 def cargar_campanas():
     """Trae /campanas y la deja lista para consultar. Devuelve cuantos lotes
     quedaron cargados. Cualquier cosa rara se ignora en silencio: mas vale
-    un boleto sin lote que una corrida detenida."""
+    un boleto sin lote que una corrida detenida.
+
+    Cada lote arranca por boleto (desde_boleto, V4.1) o por momento (desde,
+    V4.0). Puede traer tope_kg y siguiente_boleto."""
     global CAMPANAS
     CAMPANAS = {}
+    _RESUMEN_PREVIO.clear()
     if not CFG.get("campanas", True):
         return 0
     datos = firebase_get("campanas")
@@ -1102,31 +1134,163 @@ def cargar_campanas():
         for clave, lote in lotes.items():
             if not isinstance(lote, dict):
                 continue
+            numero = _entero(lote.get("numero", clave))
+            if numero is None:
+                continue
             desde = lote.get("desde")
-            if not isinstance(desde, str) or len(desde) < 10:
+            if not (isinstance(desde, str) and len(desde) >= 10):
+                desde = None
+            desde_boleto = _entero(lote.get("desde_boleto"))
+            if desde is None and desde_boleto is None:
                 continue
             try:
-                numero = int(lote.get("numero", clave))
+                tope = float(lote.get("tope_kg")) if lote.get("tope_kg") not in (None, "") else None
             except Exception:
-                continue
-            filas.append((desde, numero))
+                tope = None
+            filas.append({"numero": numero, "desde": desde, "desde_boleto": desde_boleto,
+                          "tope_kg": tope if tope and tope > 0 else None,
+                          "siguiente_boleto": _entero(lote.get("siguiente_boleto"))})
         if filas:
-            filas.sort(reverse=True)      # el arranque mas reciente, primero
+            filas.sort(key=lambda x: x["numero"], reverse=True)   # el mas nuevo, primero
             CAMPANAS[grupo] = filas
             total += len(filas)
     return total
 
 
-def lote_de(grupo, entrada):
+def _pertenece(lote, entrada, boleto):
+    if lote.get("desde_boleto") is not None:
+        return boleto is not None and boleto >= lote["desde_boleto"]
+    return bool(entrada) and entrada >= lote["desde"]
+
+
+def lote_de(grupo, entrada, boleto=None):
     """A que lote pertenece este boleto. None si esa procedencia no lleva
-    campanas, o si el camion entro antes de que empezara la primera."""
-    filas = CAMPANAS.get(grupo or "")
-    if not filas or not entrada:
+    campanas, o si el camion es anterior a la primera."""
+    filas = CAMPANAS.get(clave_fb(grupo))
+    if not filas:
         return None
-    for desde, numero in filas:
-        if entrada >= desde:
-            return numero
+    for lote in filas:
+        if _pertenece(lote, entrada, boleto):
+            return lote["numero"]
     return None
+
+
+def firebase_get_rango(ruta, desde, hasta):
+    """Lectura por rango de llaves (fechas). None si no se pudo leer."""
+    q = {"orderBy": '"$key"', "startAt": '"%s"' % desde, "endAt": '"%s"' % hasta}
+    if CFG.get("firebase_auth"):
+        q["auth"] = CFG["firebase_auth"]
+    url = "%s/%s.json?%s" % (CFG["firebase_url"].rstrip("/"), ruta.strip("/"),
+                             urllib.parse.urlencode(q))
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=CFG["timeout_firebase"]) as resp:
+            datos = json.loads(resp.read().decode("utf-8"))
+            return datos if isinstance(datos, dict) else {}
+    except Exception as e:
+        log("No se pudo leer el rango %s de %s: %s" % (ruta, desde, e), "WARN")
+        return None
+
+
+def _kg_previo(grupo_k, numero, inicio_ventana):
+    """Kg de planta de ese lote en los dias ANTES de la ventana de esta
+    corrida, tomados del resumen que ya esta escrito (por_lote). Los dias de
+    la ventana se cuentan boleto por boleto, asi que no se suman dos veces."""
+    if "datos" not in _RESUMEN_PREVIO:
+        ini = datetime.strptime(inicio_ventana, "%Y-%m-%d")
+        _RESUMEN_PREVIO["datos"] = firebase_get_rango(
+            "resumen",
+            (ini - timedelta(days=CAMPANA_DIAS_ATRAS)).strftime("%Y-%m-%d"),
+            (ini - timedelta(days=1)).strftime("%Y-%m-%d"))
+    datos = _RESUMEN_PREVIO["datos"]
+    if datos is None:
+        return None
+    total = 0
+    for dia in datos.values():
+        try:
+            total += ((((dia or {}).get("por_lote") or {}).get(grupo_k) or {})
+                      .get(str(numero)) or {}).get("kg") or 0
+        except Exception:
+            pass
+    return total
+
+
+def _guardar_lote_auto(grupo_k, lote, motivo):
+    ahora = datetime.now().isoformat(timespec="seconds")
+    # Una sola peticion multi-ruta: el lote y su renglon de historial entran
+    # juntos o no entra ninguno. (Las llaves llevan espacios: van en el
+    # cuerpo, no en la URL.)
+    ok = firebase_patch({
+        "campanas/%s/lotes/%d" % (grupo_k, lote["numero"]): lote,
+        "campanas/%s/historial/auto-%s-%d" % (grupo_k, ahora.replace(":", ""), lote["numero"]): {
+            "cuando": ahora, "quien": "agente (automatico)",
+            "que": "abre campana %d desde boleto %d" % (lote["numero"], lote["desde_boleto"]),
+            "motivo": motivo},
+    })
+    if not ok:
+        raise RuntimeError("Firebase no confirmo la escritura")
+
+
+def avanzar_campanas(registros, inicio_ventana):
+    """Cierra una campana al superar su tope y abre la siguiente.
+
+    La siguiente arranca en (boleto que cruzo + 1): como el folio es de toda
+    la bascula, eso es exactamente "el siguiente camion de esa procedencia".
+    Si el gestor dejo siguiente_boleto, manda ese. Devuelve lo que hizo."""
+    hechos = []
+    for grupo_k in list(CAMPANAS.keys()):
+        for _ in range(5):
+            filas = CAMPANAS.get(grupo_k) or []
+            if not filas:
+                break
+            cur = filas[0]
+            nuevo, motivo = None, None
+            if cur.get("siguiente_boleto"):
+                nuevo = cur["siguiente_boleto"]
+                motivo = "boleto de arranque indicado por el gestor"
+            elif cur.get("tope_kg"):
+                prev = _kg_previo(grupo_k, cur["numero"], inicio_ventana)
+                if prev is None:
+                    break          # sin el resumen no se decide nada
+                propios = sorted(
+                    [r for r in registros
+                     if clave_fb(r.get("grupo")) == grupo_k and es_planta(r.get("producto"))
+                     and lote_de(r.get("grupo"), r.get("entrada"), r.get("boleto")) == cur["numero"]],
+                    key=lambda r: r["boleto"])
+                if prev > cur["tope_kg"]:
+                    if propios:
+                        nuevo = propios[0]["boleto"]
+                        motivo = "el tope ya estaba superado antes de esta corrida; revisar el arranque"
+                else:
+                    acum = prev
+                    for r in propios:
+                        acum += r.get("neto") or 0
+                        if acum > cur["tope_kg"]:
+                            nuevo = r["boleto"] + 1
+                            motivo = "tope de %.3f t superado en el boleto %d (%.3f t)" % (
+                                cur["tope_kg"] / 1000.0, r["boleto"], acum / 1000.0)
+                            break
+            if not nuevo:
+                break
+            lote = {"numero": cur["numero"] + 1, "desde_boleto": int(nuevo),
+                    "tope_kg": cur.get("tope_kg"), "auto": True,
+                    "firma": {"quien": "agente (automatico)",
+                              "cuando": datetime.now().isoformat(timespec="seconds")}}
+            if CFG.get("modo_observacion"):
+                hechos.append("OBSERVACION: %s abriria campana %d desde boleto %d (%s)"
+                              % (grupo_k, lote["numero"], lote["desde_boleto"], motivo))
+                break
+            try:
+                _guardar_lote_auto(grupo_k, lote, motivo)
+            except Exception as e:
+                log("Campanas: no se pudo abrir la %d de %s (%s)" % (lote["numero"], grupo_k, e), "WARN")
+                break
+            filas.insert(0, {"numero": lote["numero"], "desde": None,
+                             "desde_boleto": lote["desde_boleto"], "tope_kg": lote["tope_kg"],
+                             "siguiente_boleto": None})
+            hechos.append("%s: abre campana %d desde boleto %d (%s)"
+                          % (grupo_k, lote["numero"], lote["desde_boleto"], motivo))
+    return hechos
 
 
 def _acumular(dest, llave, registro):
@@ -1156,7 +1320,7 @@ def armar_resumen(fecha_k, registros):
         numero = r.get("lote")
         if numero is None:
             continue
-        grupo = r.get("grupo") or "SIN PROCEDENCIA"
+        grupo = clave_fb(r.get("grupo") or "SIN PROCEDENCIA")
         _acumular(por_lote.setdefault(grupo, {}), str(numero), r)
     for r in otros:
         _acumular(otros_grupo, r.get("grupo") or "SIN PROCEDENCIA", r)
@@ -1296,36 +1460,47 @@ def main():
     resumen_dia = {}
 
     # ---- boletos cerrados ----
-    for idx, d in enumerate(dias):
+    # V4.1: primero se leen TODOS los dias, para que el cierre por tope vea
+    # los boletos en orden antes de ponerles su lote.
+    leidos = []
+    for d in dias:
         desde, hasta = rango_dia(d)
         crudos = leer_webservice(CFG["ws_cerrados"], desde, hasta)
         if crudos is None:
             continue
-        fecha_k = d.strftime("%Y-%m-%d")
-        registros = []
-        for c in crudos:
-            r = normalizar(c, abierto=False)
-            if r:
-                # El lote se calcula, no se captura. Si esa procedencia no
-                # lleva campanas queda en None y Firebase borra el campo,
-                # asi que un cambio de campana se limpia solo al reprocesar.
-                try:
-                    r["lote"] = lote_de(r.get("grupo"), r.get("entrada"))
-                except Exception:
-                    r["lote"] = None
-                registros.append(r)
+        registros = [r for r in (normalizar(c, abierto=False) for c in crudos) if r]
+        leidos.append((d, d.strftime("%Y-%m-%d"), registros))
+
+    campanas_abiertas = []
+    if n_campanas:
+        try:
+            campanas_abiertas = avanzar_campanas(
+                [r for _, _, regs in leidos for r in regs], dias[-1].strftime("%Y-%m-%d"))
+            for h in campanas_abiertas:
+                log("Campanas: " + h)
+        except Exception as e:
+            log("Campanas: no se pudo revisar el tope (%s). Corrida normal." % e, "WARN")
+
+    for idx, (d, fecha_k, registros) in enumerate(leidos):
         for r in registros:
+            # El lote se calcula, no se captura. Si esa procedencia no
+            # lleva campanas queda en None y Firebase borra el campo,
+            # asi que un cambio de campana se limpia solo al reprocesar.
+            try:
+                r["lote"] = lote_de(r.get("grupo"), r.get("entrada"), r.get("boleto"))
+            except Exception:
+                r["lote"] = None
             enviar("boletos/%s/%d" % (fecha_k, r["boleto"]), r)
         total_cerrados += len(registros)
 
         # durante una carga larga, avisa por Dropbox como va
-        if carga and (idx % 10 == 0 or idx == len(dias) - 1):
+        if carga and (idx % 10 == 0 or idx == len(leidos) - 1):
             vaciar_lote()
             escribir_estado({
                 "agente": VERSION, "equipo": os.environ.get("COMPUTERNAME", "?"),
                 "modo": "carga historica en curso", "orden": carga,
-                "avance": "%d de %d dias" % (idx + 1, len(dias)),
-                "pct": round((idx + 1) / len(dias) * 100),
+                "avance": "%d de %d dias" % (idx + 1, len(leidos)),
+                "pct": round((idx + 1) / max(1, len(leidos)) * 100),
                 "boletos_hasta_ahora": total_cerrados,
                 "peticiones": ENVIADOS[1],
                 "ultima_corrida": datetime.now().isoformat(timespec="seconds"),
@@ -1356,7 +1531,7 @@ def main():
                 except Exception:
                     pass
             try:
-                r["lote"] = lote_de(r.get("grupo"), r.get("entrada"))
+                r["lote"] = lote_de(r.get("grupo"), r.get("entrada"), r.get("boleto"))
             except Exception:
                 r["lote"] = None
             patio.append(r)
@@ -1399,6 +1574,7 @@ def main():
         "dias_revisados": len(dias),
         "carga_historica": carga or None,
         "lotes_cargados": n_campanas,
+        "campanas_abiertas": campanas_abiertas or None,
         "recalculo": recalculo or None,
         "version_pendiente": version_nueva,
         "carpeta": BASE,

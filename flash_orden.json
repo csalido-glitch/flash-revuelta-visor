@@ -1,6 +1,6 @@
 {
-  "_nota": "V4.0: campañas (lotes). El agente lee /campanas de Firebase, le pone a cada boleto su número de lote y agrega por_lote al resumen del día. Si /campanas no existe, se comporta igual que la V3.9. Los candados y el ritmo del estado no cambian.",
-  "id": "v40-campanas",
+  "_nota": "V4.1: campañas por número de boleto y cierre automático por tope (abre la siguiente en el boleto siguiente de la procedencia). Si /campanas no existe, se comporta igual que la V4.0.",
+  "id": "v41-campanas-boleto",
   "carga_dias": 0,
   "config": {
     "dias_hacia_atras": 2,
@@ -10,7 +10,7 @@
     "campanas": true
   },
   "actualizar": {
-    "sha256": "fd6487aa36c9af3513d054bf2dc029def34fbba3721506bc0683d955e5ab5d3d",
+    "sha256": "171447d886d58ae232bce4ceb57972dd95f637b476d14426e5d2efe6ecd1ffb7",
     "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }
