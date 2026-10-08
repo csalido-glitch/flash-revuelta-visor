@@ -1132,8 +1132,11 @@ const CP = { datos:{}, mineral:new Set(), otros:new Set(), edit:null };
 const tTon = kg => (kg==null || isNaN(kg)) ? "—" : (kg/1000).toLocaleString("es-MX",{minimumFractionDigits:3, maximumFractionDigits:3});
 function lotesDe(cuerpo){
   const l = (cuerpo && cuerpo.lotes) || {};
-  return Object.keys(l).map(k => Object.assign({numero:Number(k)}, l[k]))
-    .filter(x => !isNaN(x.numero)).sort((a,b) => b.numero - a.numero);
+  /* Firebase devuelve una lista con huecos (null) cuando los numeros de
+     campana son casi seguidos (1..25); los huecos se ignoran. */
+  return Object.keys(l).filter(k => l[k] && typeof l[k] === "object")
+    .map(k => Object.assign({numero:Number(k)}, l[k]))
+    .filter(x => !isNaN(x.numero) && x.numero > 0).sort((a,b) => b.numero - a.numero);
 }
 function acumLote(gk, n){
   let kg = 0, viajes = 0;
