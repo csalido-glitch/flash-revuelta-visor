@@ -555,7 +555,10 @@ td .recorta.media  { max-width:146px; }
 #tip b { display:block; font-size:13px; margin-bottom:2px; }
 
 /* ---------- V19: inicio de sesion, campanas y usuarios ---------- */
-#login{position:fixed;inset:0;z-index:100;background:var(--plane);display:flex;align-items:center;justify-content:center;padding:16px}
+#login{position:fixed;inset:0;z-index:100;background:var(--plane);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto}
+/* V19.4: el banner institucional queda visible arriba del inicio de sesion */
+.banner-mrt{position:relative;z-index:101}
+body.con-login{overflow:hidden}
 #login .caja{width:100%;max-width:390px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:22px}
 #login h2{margin:0 0 4px;font-size:18px;color:var(--ink)}
 #login .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
@@ -1023,7 +1026,14 @@ const msgErr = e => ERRORES[e.message] || (String(e.message).startsWith("WEAK_PA
 
 let MODO_CREAR = false;
 function lMsg(t, c){ const m=$("#lMsg"); m.innerHTML=t||""; m.className=c||""; }
-function mostrarLogin(t, c){ $("#login").classList.remove("oculto"); lMsg(t, c); }
+function mostrarLogin(t, c){
+  const L=$("#login"), B=document.querySelector(".banner-mrt");
+  L.classList.remove("oculto"); document.body.classList.add("con-login"); window.scrollTo(0,0);
+  L.style.paddingTop = ((B ? B.offsetHeight : 0) + 40) + "px";
+  lMsg(t, c);
+}
+window.addEventListener("resize",()=>{ const L=$("#login"), B=document.querySelector(".banner-mrt");
+  if(L && !L.classList.contains("oculto")) L.style.paddingTop=((B?B.offsetHeight:0)+40)+"px"; });
 const EXCEPCIONES = ["bascula.cieneguita@mrt.mx"];   // V19.1: correos fuera del dominio, autorizados por JC
 const correoValido = e => (e.endsWith(DOMINIO) && e.length > DOMINIO.length) || EXCEPCIONES.includes(e);
 
@@ -1083,7 +1093,7 @@ async function despuesDeEntrar(){
     return mostrarLogin("Tu correo no está en la lista de autorizados. Pide acceso a César Salido o a JC.", "bad");
   }
   AUTH.perm = perm;
-  $("#login").classList.add("oculto");
+  $("#login").classList.add("oculto"); document.body.classList.remove("con-login");
   $("#uCorreo").textContent = AUTH.email;
   $$('.tab[data-t="campanas"]').forEach(b => b.classList.toggle("oculto", !perm.gestiona_campanas));
   $$('.tab[data-t="usuarios"]').forEach(b => b.classList.toggle("oculto", !perm.gestiona_usuarios));
