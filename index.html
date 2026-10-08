@@ -786,6 +786,7 @@ details summary{cursor:pointer}
         <div class="campo"><label for="fProc">Procedencia</label><select id="fProc"><option value="">Todas</option></select></div>
         <div class="campo"><label for="fProd">Producto</label><select id="fProd"><option value="">Todos</option></select></div>
         <div class="campo"><label for="fClase">Clase</label><select id="fClase"><option value="">Todas</option></select></div>
+        <div class="campo"><label for="fCamp">Campaña</label><select id="fCamp"><option value="">Todas</option></select></div>
         <div class="campo"><label for="fTexto">Chofer, placas o boleto</label><input type="search" id="fTexto" placeholder="Buscar…"></div>
         <div class="campo"><label>&nbsp;</label><button class="btn" id="bLimpiar">Limpiar</button></div>
         <div class="campo"><label>&nbsp;</label><button class="btn" id="bCsv">Descargar CSV</button></div>
@@ -857,7 +858,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19 · 7-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.2 · 7-oct-2026)</span>
   </p>
 </div>
 
@@ -2320,6 +2321,7 @@ async function cargarDetalle(){
   const packs = await Promise.all(dias.map(f=>traer("/boletos/"+f)));
   S.detalle=[];
   packs.forEach(p=>{ if(p) Object.values(p).forEach(r=>S.detalle.push(r)); });
+  await campanasDet();
   llenarSelects(); pintarTabla(); cargando=false;
 }
 
@@ -2329,12 +2331,52 @@ function llenarSelects(){
       vals.map(v=>`<option${v===a?" selected":""}>${esc(v)}</option>`).join(""); };
   const u=k=>[...new Set(S.detalle.map(r=>r[k]).filter(Boolean))].sort();
   set("#fProc",u("procedencia")); set("#fProd",u("producto")); set("#fClase",u("clase"));
+  llenarCampanas();
+}
+
+/* V19.2 · Filtro por campana. Las opciones salen de lo que el gestor dio de
+   alta (/campanas), no de los boletos cargados: asi se puede elegir una
+   campana aunque el rango de fechas todavia no la alcance. */
+let CAMP_DET = null;
+async function campanasDet(){
+  if(CAMP_DET) return CAMP_DET;
+  try{ CAMP_DET = (await traer("/campanas")) || {}; }catch(e){ CAMP_DET = {}; }
+  return CAMP_DET;
+}
+function llenarCampanas(){
+  const s=$("#fCamp"), a=s.value, p=$("#fProc").value, ops=[];
+  Object.entries(CAMP_DET||{}).forEach(([gk,c])=>{
+    if(!c || typeof c!=="object" || gk.startsWith("_")) return;
+    const nom=c.procedencia||gk;
+    if(p && claveFb(p)!==gk && !S.detalle.some(r=>r.procedencia===p && claveFb(r.grupo)===gk)) return;
+    lotesDe(c).forEach(l=>ops.push({v:gk+"|"+l.numero, t:(p?"":nom+" · ")+"Campaña "+l.numero, gk, n:l.numero}));
+  });
+  ops.sort((x,y)=> x.gk===y.gk ? y.n-x.n : x.gk.localeCompare(y.gk));
+  s.innerHTML='<option value="">Todas</option><option value="-">Sin campaña</option>'+
+    ops.map(o=>`<option value="${esc(o.v)}"${o.v===a?" selected":""}>${esc(o.t)}</option>`).join("");
+  if(a==="-") s.value="-";
+}
+async function campanaElegida(){
+  const v=$("#fCamp").value;
+  if(v && v!=="-"){
+    const [gk,n]=v.split("|"), l=lotesDe((CAMP_DET||{})[gk]).find(x=>x.numero===Number(n));
+    if(l && l.desde_boleto){
+      const b=await buscarBoleto(l.desde_boleto);
+      if(b && b.fecha && b.fecha < ($("#fDesde").value||S.fecha)){
+        $("#fDesde").value=b.fecha; sincroFechas(); await cargarDetalle(); return;
+      }
+    }
+  }
+  pintarTabla();
 }
 
 function filtradas(){
-  const p=$("#fProc").value, pr=$("#fProd").value, cl=$("#fClase").value;
+  const p=$("#fProc").value, pr=$("#fProd").value, cl=$("#fClase").value, cp=$("#fCamp").value;
   const t=($("#fTexto").value||"").trim().toLowerCase();
+  const [cgk,cn]=(cp && cp!=="-") ? cp.split("|") : [null,null];
   return S.detalle.filter(r=>{
+    if(cp==="-" && r.lote!=null) return false;
+    if(cgk && (claveFb(r.grupo)!==cgk || Number(r.lote)!==Number(cn))) return false;
     if(p && r.procedencia!==p) return false;
     if(pr && r.producto!==pr) return false;
     if(cl && r.clase!==cl) return false;
@@ -2357,7 +2399,8 @@ const DET_COLS = [
   {k:"producto",        t:"Producto",    fija:true},
   {k:"bruto",           t:"Bruto",                  num:true},
   {k:"tara",            t:"Tara",                   num:true},
-  {k:"neto",            t:"Neto",        fija:true, num:true}
+  {k:"neto",            t:"Neto",        fija:true, num:true},
+  {k:"lote",            t:"Campaña",                num:true}
 ];
 const DET_SET = prefsLeer("flash-det-cols", []);
 
@@ -2377,6 +2420,7 @@ function celdaDet(k, r, mineral){
     case "bruto":   return `<td class="num">${nNum(r.bruto)}</td>`;
     case "tara":    return `<td class="num">${nNum(r.tara)}</td>`;
     case "neto":    return `<td class="num"><b>${nNum(r.neto)}</b></td>`;
+    case "lote":    return `<td class="num">${r.lote==null?"—":r.lote}</td>`;
   }
   return "<td></td>";
 }
@@ -2410,7 +2454,9 @@ function pintarTabla(){
   $("#pieT").textContent = nTon(kgMin)+" t de mineral";
 }
 
-["#fProc","#fProd","#fClase"].forEach(s=>$(s).addEventListener("change",pintarTabla));
+["#fProd","#fClase"].forEach(s=>$(s).addEventListener("change",pintarTabla));
+$("#fProc").addEventListener("change",()=>{ llenarCampanas(); pintarTabla(); });
+$("#fCamp").addEventListener("change",campanaElegida);
 $("#fTexto").addEventListener("input",pintarTabla);
 ["#fDesde","#fHasta"].forEach(s=>$(s).addEventListener("change",cargarDetalle));
 /* ===================================================================
@@ -2502,12 +2548,12 @@ const sincroHasta = montarFecha("fHasta","fHastaBtn");
 function sincroFechas(){ sincroDesde&&sincroDesde(); sincroHasta&&sincroHasta(); }
 
 $("#bLimpiar").addEventListener("click",()=>{
-  $("#fProc").value=""; $("#fProd").value=""; $("#fClase").value=""; $("#fTexto").value="";
+  $("#fProc").value=""; $("#fProd").value=""; $("#fClase").value=""; $("#fCamp").value=""; $("#fTexto").value="";
   $("#fDesde").value=S.fecha; $("#fHasta").value=S.fecha; sincroFechas(); cargarDetalle();
 });
 $("#bCsv").addEventListener("click",()=>{
   const f=filtradas();
-  const cols=["boleto","entrada","salida","minutos_bascula","placas","chofer","procedencia","grupo","producto","clase","bruto","tara","neto"];
+  const cols=["boleto","entrada","salida","minutos_bascula","placas","chofer","procedencia","grupo","producto","clase","bruto","tara","neto","lote"];
   const csv=[cols.join(",")].concat(f.map(r=>cols.map(c=>{
     const v=r[c]==null?"":String(r[c]); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
   }).join(","))).join("\n");
