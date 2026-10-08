@@ -1109,6 +1109,13 @@ def _entero(v):
         return None
 
 
+def _como_dict(v):
+    """Firebase convierte {"1":..,"2":..} en [null, .., ..]. Se regresa a dict."""
+    if isinstance(v, list):
+        return {str(i): x for i, x in enumerate(v) if x is not None}
+    return v if isinstance(v, dict) else None
+
+
 def cargar_campanas():
     """Trae /campanas y la deja lista para consultar. Devuelve cuantos lotes
     quedaron cargados. Cualquier cosa rara se ignora en silencio: mas vale
@@ -1129,10 +1136,12 @@ def cargar_campanas():
     for grupo, cuerpo in datos.items():
         if grupo.startswith("_") or not isinstance(cuerpo, dict):
             continue
-        ex = cuerpo.get("excluidos")
-        if isinstance(ex, dict):
+        ex = _como_dict(cuerpo.get("excluidos"))
+        if ex:
             EXCLUIDOS[grupo] = set(b for b in (_entero(k) for k in ex.keys()) if b is not None)
-        lotes = cuerpo.get("lotes")
+        # Firebase regresa una LISTA (no un diccionario) cuando las llaves son
+        # numeros casi seguidos, p. ej. lotes 1..25. Se normaliza.
+        lotes = _como_dict(cuerpo.get("lotes"))
         if not isinstance(lotes, dict):
             continue
         filas = []
@@ -1216,8 +1225,8 @@ def _kg_previo(grupo_k, numero, inicio_ventana):
     total = 0
     for dia in datos.values():
         try:
-            total += ((((dia or {}).get("por_lote") or {}).get(grupo_k) or {})
-                      .get(str(numero)) or {}).get("kg") or 0
+            g = _como_dict((((dia or {}).get("por_lote") or {}).get(grupo_k))) or {}
+            total += (g.get(str(numero)) or {}).get("kg") or 0
         except Exception:
             pass
     return total
@@ -1393,6 +1402,14 @@ def main():
     # con el agente apagado, que es justo cuando mas falta hace.
     version_nueva = autoactualizar(orden)
 
+    # V4.2: "solo_apagar_version" permite apagar UNA version vieja sin apagar
+    # la nueva. Sirve para que la corrida que todavia es la vieja solo se
+    # actualice y se detenga, y la siguiente (ya nueva) haga el trabajo.
+    solo = CFG.get("solo_apagar_version")
+    if CFG.get("apagado") and solo and str(solo) != VERSION:
+        log("Orden de apagado solo para la version %s; esta es %s y sigue." % (solo, VERSION))
+        CFG["apagado"] = False
+
     if CFG.get("apagado"):
         log("Apagado por orden de Dropbox. El agente no hace nada.")
         escribir_estado({"agente": VERSION, "modo": "apagado",
@@ -1417,6 +1434,17 @@ def main():
         pedido = int(orden.get("carga_dias") or 0)
     except Exception:
         pedido = 0
+    # V4.2: "carga_desde" (aaaa-mm-dd) gana sobre "carga_dias": el agente
+    # calcula solo cuantos dias faltan para llegar a esa fecha, el dia que
+    # corra. Asi no importa si la orden se sube hoy o dentro de una semana.
+    desde_txt = str(orden.get("carga_desde") or "").strip()
+    if desde_txt:
+        try:
+            ini = datetime.strptime(desde_txt[:10], "%Y-%m-%d")
+            pedido = max(1, (hoy.date() - ini.date()).days)
+            log("Carga desde %s: %d dias hacia atras." % (desde_txt[:10], pedido))
+        except Exception:
+            log("carga_desde no tiene forma de fecha (%s). Se ignora." % desde_txt, "WARN")
     if pedido > 0:
         ident = str(orden.get("id") or ("carga-" + str(pedido)))
         if orden_ya_hecha(ident):
