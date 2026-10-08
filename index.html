@@ -1003,7 +1003,8 @@ const msgErr = e => ERRORES[e.message] || (String(e.message).startsWith("WEAK_PA
 let MODO_CREAR = false;
 function lMsg(t, c){ const m=$("#lMsg"); m.innerHTML=t||""; m.className=c||""; }
 function mostrarLogin(t, c){ $("#login").classList.remove("oculto"); lMsg(t, c); }
-const correoValido = e => e.endsWith(DOMINIO) && e.length > DOMINIO.length;
+const EXCEPCIONES = ["bascula.cieneguita@mrt.mx"];   // V19.1: correos fuera del dominio, autorizados por JC
+const correoValido = e => (e.endsWith(DOMINIO) && e.length > DOMINIO.length) || EXCEPCIONES.includes(e);
 
 $("#lCrear").addEventListener("click", ()=>{
   MODO_CREAR = !MODO_CREAR;
