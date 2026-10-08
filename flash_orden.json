@@ -1,6 +1,6 @@
 {
-  "_nota": "V4.1: campañas por número de boleto y cierre automático por tope (abre la siguiente en el boleto siguiente de la procedencia). Si /campanas no existe, se comporta igual que la V4.0.",
-  "id": "v41-campanas-boleto",
+  "_nota": "V4.2: boletos excluidos por procedencia (/campanas/<grupo>/excluidos) no reciben campaña. Todo lo demás igual que V4.1.",
+  "id": "v42-excluidos",
   "carga_dias": 0,
   "config": {
     "dias_hacia_atras": 2,
@@ -10,7 +10,7 @@
     "campanas": true
   },
   "actualizar": {
-    "sha256": "171447d886d58ae232bce4ceb57972dd95f637b476d14426e5d2efe6ecd1ffb7",
+    "sha256": "9f1527c1b4a8b8ee94f546243fe39af1f6a2c04db5c7dc2a76506e737b329f4a",
     "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }

@@ -52,7 +52,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.1"
+VERSION = "4.2"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -1087,6 +1087,7 @@ def es_planta(producto):
 # el panel. Esto nada mas aplica la regla y deja el numero puesto.
 
 CAMPANAS = {}          # clave de grupo -> [lote, ...] del numero mas alto al mas bajo
+EXCLUIDOS = {}         # V4.2: clave de grupo -> {boleto, ...} que no cuentan en ninguna campana
 CAMPANA_DIAS_ATRAS = 120   # hasta donde se mira el resumen para sumar un lote
 _RESUMEN_PREVIO = {}       # cache de una sola corrida
 
@@ -1115,8 +1116,9 @@ def cargar_campanas():
 
     Cada lote arranca por boleto (desde_boleto, V4.1) o por momento (desde,
     V4.0). Puede traer tope_kg y siguiente_boleto."""
-    global CAMPANAS
+    global CAMPANAS, EXCLUIDOS
     CAMPANAS = {}
+    EXCLUIDOS = {}
     _RESUMEN_PREVIO.clear()
     if not CFG.get("campanas", True):
         return 0
@@ -1127,6 +1129,9 @@ def cargar_campanas():
     for grupo, cuerpo in datos.items():
         if grupo.startswith("_") or not isinstance(cuerpo, dict):
             continue
+        ex = cuerpo.get("excluidos")
+        if isinstance(ex, dict):
+            EXCLUIDOS[grupo] = set(b for b in (_entero(k) for k in ex.keys()) if b is not None)
         lotes = cuerpo.get("lotes")
         if not isinstance(lotes, dict):
             continue
@@ -1166,9 +1171,12 @@ def _pertenece(lote, entrada, boleto):
 def lote_de(grupo, entrada, boleto=None):
     """A que lote pertenece este boleto. None si esa procedencia no lleva
     campanas, o si el camion es anterior a la primera."""
-    filas = CAMPANAS.get(clave_fb(grupo))
+    gk = clave_fb(grupo)
+    filas = CAMPANAS.get(gk)
     if not filas:
         return None
+    if boleto is not None and _entero(boleto) in EXCLUIDOS.get(gk, ()):
+        return None   # V4.2: excluido por el gestor (duplicado, tara 0, no es del flete...)
     for lote in filas:
         if _pertenece(lote, entrada, boleto):
             return lote["numero"]
