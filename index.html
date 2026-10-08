@@ -253,17 +253,12 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 
 /* ---------- feed de ultimas pesadas ---------- */
 .feed { display:flex; flex-direction:column; gap:2px; }
-.feed .it { display:grid; grid-template-columns:62px 1fr auto auto; gap:14px; align-items:center;
+.feed .it { display:grid; grid-template-columns:var(--cols, 62px 1fr 104px auto auto); gap:14px; align-items:center;
   padding:11px 12px; border-radius:10px; font-size:13px; }
-/* La rejilla se acomoda a las columnas que quedaron prendidas. */
-.feed.sin-hora .it { grid-template-columns:1fr auto auto; }
-.feed.sin-hace .it { grid-template-columns:62px 1fr auto; }
-.feed.sin-hora.sin-hace .it { grid-template-columns:1fr auto; }
+/* La rejilla se acomoda a las columnas que quedaron prendidas (la arma pintarFeed). */
 @media (max-width:620px){
-  .feed .it { grid-template-columns:54px 1fr auto; }
+  .feed .it { grid-template-columns:var(--colsm, 54px 1fr auto auto); }
   .feed .it .hace { display:none; }
-  .feed.sin-hora .it, .feed.sin-hora.sin-hace .it { grid-template-columns:1fr auto; }
-  .feed.sin-hace .it { grid-template-columns:54px 1fr auto; }
 }
 .feed .it + .it { border-top:1px solid var(--grid); }
 .feed .it .hr { font-variant-numeric:tabular-nums; font-weight:700; color:var(--ink); }
@@ -530,6 +525,9 @@ th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
 .tag.otro { background:color-mix(in srgb,var(--muted) 22%, transparent); color:var(--ink-2); }
 /* V19.3 · campana visible en Hoy y En patio */
 .tag.camp { background:color-mix(in srgb,var(--gold-ink) 16%, transparent); color:var(--gold-ink); }
+.tag.sincamp { background:transparent; color:var(--muted); border:1px dashed color-mix(in srgb,var(--muted) 60%, transparent); }
+.feed .it .cp { font-size:12px; font-weight:700; color:var(--gold-ink); white-space:nowrap; }
+.feed .it .cp.no { font-weight:500; color:var(--muted); opacity:.75; }
 .fila .nom .nomtx { display:flex; flex-direction:column; min-width:0; }
 .fila .nom .camp-av { font-size:11px; font-weight:600; color:var(--gold-ink); margin-top:2px; }
 .proc { display:flex; align-items:center; gap:7px; }
@@ -881,7 +879,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.4 · 7-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.5 · 8-oct-2026)</span>
   </p>
 </div>
 
@@ -1740,13 +1738,24 @@ const FEED_CAMPOS = [
   {k:"placas",   t:"Placas"},
   {k:"pesadas",  t:"Bruto y tara"},
   {k:"min",      t:"Min en báscula"},
+  {k:"camp",     t:"Campaña"},
   {k:"hace",     t:"Hace cuánto"}
 ];
-const FEED_SET = prefsLeer("flash-feed-cols", ["hora","boleto","producto","chofer","hace"]);
+const FEED_SET = prefsLeer("flash-feed-cols", ["hora","boleto","producto","chofer","camp","hace"]);
+/* V19.5: la columna Campaña llega prendida a todos, aunque ya tuvieran
+   sus casillas guardadas de antes. Despues cada quien la apaga si quiere. */
+try{ if(!localStorage.getItem("flash-feed-camp-v195")){
+  FEED_SET.add("camp"); prefsGuardar("flash-feed-cols", FEED_SET); localStorage.setItem("flash-feed-camp-v195","1"); } }catch(e){}
 
 /* V19.3 · La campana se muestra donde se vigila (Hoy, En patio), no solo
    donde se busca (Detalle). El lote lo pone el agente; aqui solo se lee. */
-const tagCamp = r => (r && r.lote!=null) ? ` <span class="tag camp">Campaña ${esc(String(r.lote))}</span>` : "";
+/* V19.5: TODOS los camiones de mineral/jal muestran su campaña; el que no
+   tiene, lo dice ("Sin campaña"). Otros productos no llevan etiqueta. */
+const tagCamp = r => {
+  if(!r) return "";
+  if(r.lote!=null) return ` <span class="tag camp">Campaña ${esc(String(r.lote))}</span>`;
+  return ` <span class="tag sincamp">Sin asignar</span>`;   // todos, sin excepcion
+};
 function avanceCamp(grupo){
   const gk = claveFb(grupo), c = (typeof CAMP_DET!=="undefined" && CAMP_DET) ? CAMP_DET[gk] : null;
   const cur = c ? lotesDe(c)[0] : null;
@@ -1792,9 +1801,11 @@ function pintarFeed(){
       ${ver("hora")?`<span class="hr">${hhmm(e.t)}</span>`:""}
       <span class="qn">
         <span class="chip" style="background:${planta?fondoChip(r.grupo):"var(--muted)"}"></span>
-        ${esc(r.procedencia||"—")}${ver("producto")&&r.producto?` <span class="prod">${esc(r.producto)}</span>`:""}${tagCamp(r)}
+        ${esc(r.procedencia||"—")}${ver("producto")&&r.producto?` <span class="prod">${esc(r.producto)}</span>`:""}
         ${e.abierta?'<span class="tag primera">1ª pesada · en patio</span>':""}
         ${det.length?`<em>${det.join(" · ")}</em>`:""}</span>
+      ${ver("camp") ? (r.lote!=null ? `<span class="cp">Campaña ${esc(String(r.lote))}</span>`
+          : `<span class="cp no">Sin asignar</span>`) : ""}
       <span class="tn">${peso!=null?nTon(peso)+" t":"—"}${e.abierta?'<small>bruto</small>':""}</span>
       ${ver("hace")?`<span class="hace">${hace(minsDesde(e.t))}</span>`:""}
     </div>`;
@@ -1803,6 +1814,9 @@ function pintarFeed(){
   $("#feed").style.gridTemplateColumns="";
   $("#feed").classList.toggle("sin-hora", !FEED_SET.has("hora"));
   $("#feed").classList.toggle("sin-hace", !FEED_SET.has("hace"));
+  const F=$("#feed"), cH=FEED_SET.has("hora"), cC=FEED_SET.has("camp"), cA=FEED_SET.has("hace");
+  F.style.setProperty("--cols", [cH?"62px":"", "1fr", cC?"104px":"", "auto", cA?"auto":""].filter(Boolean).join(" "));
+  F.style.setProperty("--colsm", [cH?"54px":"", "1fr", cC?"auto":"", "auto"].filter(Boolean).join(" "));
   ev.forEach(e=>S.vistos.add(e.r.boleto+"|"+(e.abierta?"1":"2")));
 }
 
@@ -2574,6 +2588,7 @@ function pintarTabla(){
 ["#fProd","#fClase"].forEach(s=>$(s).addEventListener("change",pintarTabla));
 $("#fProc").addEventListener("change",()=>{ llenarCampanas(); pintarTabla(); });
 $("#fCamp").addEventListener("change",campanaElegida);
+
 $("#fTexto").addEventListener("input",pintarTabla);
 ["#fDesde","#fHasta"].forEach(s=>$(s).addEventListener("change",cargarDetalle));
 /* ===================================================================
