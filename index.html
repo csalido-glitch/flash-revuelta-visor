@@ -446,11 +446,11 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .campo { display:flex; flex-direction:column; gap:5px; }
 .campo label { font-size:11px; font-weight:600; color:var(--muted);
                text-transform:uppercase; letter-spacing:.05em; }
-.campo input, .campo select {
+.campo input, .campo select, .campo textarea {
   font:inherit; font-size:14px; color:var(--ink); background:var(--surface);
   border:1px solid var(--border); border-radius:8px; padding:7px 10px; min-width:130px;
 }
-.campo input:focus, .campo select:focus { outline:2px solid var(--s1); outline-offset:1px; }
+.campo input:focus, .campo select:focus, .campo textarea:focus { outline:2px solid var(--s1); outline-offset:1px; }
 
 /* ---------- campo de fecha propio ----------
    El <input type="date"> del navegador se pinta con el idioma y el formato
@@ -578,7 +578,7 @@ td .recorta.media  { max-width:146px; }
 .cpchip:hover{border-color:var(--gold)}
 #p-campanas td,#p-usuarios td{vertical-align:top}
 .forma{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:start}
-.forma .campo input,.forma .campo select{width:100%}
+.forma .campo input,.forma .campo select,.forma .campo textarea{width:100%;font-family:ui-monospace,Consolas,monospace}
 .forma .chk input{width:auto !important;margin:0;flex:none}
 .forma .chk{flex-direction:row !important;justify-content:flex-start !important;align-items:center;gap:8px !important}
 .forma .chk{justify-content:flex-start;margin-top:4px;display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink-2);text-transform:none;letter-spacing:0;font-weight:400}
@@ -829,6 +829,22 @@ details summary{cursor:pointer}
       <div class="nota" id="cpMsg"></div>
     </div>
     <div class="card">
+      <h2>Carga histórica de campañas</h2>
+      <p class="sub">Para dar de alta campañas YA CERRADAS, todas debajo de la vigente. Un renglón por campaña:
+        <b>número, boleto inicial, fecha (aaaa-mm-dd)</b>. Opcional: boletos a excluir (no cuentan en ninguna campaña).</p>
+      <div class="forma">
+        <div class="campo"><label>Procedencia</label><select id="hiProc"></select></div>
+        <div class="campo" style="grid-column:1/-1"><label>Campañas (número, boleto, fecha)</label>
+          <textarea id="hiLotes" rows="8" placeholder="1,189332,2026-03-24&#10;2,190093,2026-04-09"></textarea></div>
+        <div class="campo" style="grid-column:1/-1"><label>Boletos a excluir (boleto, motivo)</label>
+          <textarea id="hiExcl" rows="4" placeholder="189333,duplicado del 189332"></textarea></div>
+        <div class="campo" style="grid-column:1/-1"><label>Motivo de la carga</label><input id="hiMot" placeholder="ej. Reconstrucción desde Excel de fletes"></div>
+        <div><button class="btn" id="hiRevisar">Revisar</button> <button class="btn pri" id="hiGuardar" disabled>Guardar carga</button></div>
+      </div>
+      <div class="nota" id="hiMsg"></div>
+      <div class="nota" id="hiExclLista" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
       <h2>Procedencias sin campaña</h2>
       <p class="sub">Clic en cualquiera para asignarle campaña.</p>
       <div class="campo"><label>Mineral y jal</label></div><div class="cpchips" id="cpSin"></div>
@@ -862,7 +878,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.3 · 7-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.4 · 7-oct-2026)</span>
   </p>
 </div>
 
@@ -1139,7 +1155,7 @@ async function cargarCampanas(){
     Object.keys((d && d.no_planta_por_grupo) || {}).forEach(g => CP.otros.add(g));
   });
   CP.mineral.forEach(g => CP.otros.delete(g));
-  pintarCampanas();
+  pintarCampanas(); hiLlenar();
 }
 function pintarCampanas(){
   const filas = [];
@@ -1262,6 +1278,67 @@ async function quitarCampana(){
   catch(e){ m.textContent = e.message; m.className = "nota bad"; }
 }
 $("#cpProc").addEventListener("change", procElegida);
+
+/* V19.4 · CARGA HISTORICA. Da de alta de un jalon campanas ya cerradas
+   (sin tope) por debajo de la vigente, y boletos excluidos. El agente
+   (V4.2) no les pone lote a los excluidos. Al guardar se pide recalcular
+   desde la fecha mas vieja. Nada se borra: cada alta queda en historial. */
+let HI = null;
+function hiLlenar(){
+  const s=$("#hiProc"), a=s.value, gs=[...CP.mineral].sort();
+  s.innerHTML=gs.map(g=>`<option${g===a?" selected":""}>${esc(g)}</option>`).join("");
+  hiPintarExcl();
+}
+function hiPintarExcl(){
+  const c=CP.datos[claveFb($("#hiProc").value)]||{}, ex=c.excluidos||{}, k=Object.keys(ex).sort();
+  $("#hiExclLista").innerHTML = k.length ? "<b>Excluidos hoy:</b> "+k.map(b=>`${esc(b)} <span class="nota">(${esc((ex[b]||{}).motivo||"")})</span>`).join(" · ") : "";
+}
+function hiRevisar(){
+  const m=$("#hiMsg"), g=$("#hiProc").value, gk=claveFb(g), act=lotesDe(CP.datos[gk]);
+  HI=null; $("#hiGuardar").disabled=true;
+  const err=[], lotes=[], excl=[];
+  ($("#hiLotes").value||"").split(/\n/).map(x=>x.trim()).filter(Boolean).forEach((l,i)=>{
+    const p=l.split(/[,;\t]/).map(x=>x.trim());
+    const n=parseInt(p[0],10), b=parseInt(p[1],10), f=p[2]||"";
+    if(!n||!b||!/^\d{4}-\d{2}-\d{2}$/.test(f)) err.push("Renglón "+(i+1)+": "+l); else lotes.push({n,b,f});
+  });
+  ($("#hiExcl").value||"").split(/\n/).map(x=>x.trim()).filter(Boolean).forEach((l,i)=>{
+    const j=l.search(/[,;\t]/), b=parseInt(j<0?l:l.slice(0,j),10), mo=j<0?"":l.slice(j+1).trim();
+    if(!b) err.push("Excluido "+(i+1)+": "+l); else excl.push({b,mo:mo||"excluido en carga histórica"});
+  });
+  lotes.sort((x,y)=>x.n-y.n);
+  for(let i=1;i<lotes.length;i++){
+    if(lotes[i].n===lotes[i-1].n) err.push("Campaña "+lotes[i].n+" repetida");
+    if(lotes[i].b<=lotes[i-1].b) err.push("El boleto de la "+lotes[i].n+" debe ser mayor que el de la "+lotes[i-1].n);
+  }
+  if(act.length){
+    lotes.forEach(l=>{ if(act.some(a=>a.numero===l.n)) err.push("La campaña "+l.n+" ya existe");
+      if(l.n>=act[0].numero) err.push("La campaña "+l.n+" no es menor que la vigente ("+act[0].numero+")");
+      if(act[0].desde_boleto && l.b>=act[0].desde_boleto) err.push("El boleto "+l.b+" no es anterior al arranque de la vigente ("+act[0].desde_boleto+")"); });
+  }
+  if(!lotes.length && !excl.length) err.push("No hay nada que cargar.");
+  if(!($("#hiMot").value||"").trim()) err.push("Falta el motivo.");
+  if(err.length){ m.innerHTML="<b>No se puede guardar:</b><br>"+err.map(esc).join("<br>"); m.className="nota bad"; return; }
+  HI={g,gk,lotes,excl};
+  m.innerHTML=`Listo para guardar en <b>${esc(g)}</b>: ${lotes.length} campaña(s)`+(lotes.length?` (${lotes[0].n} a ${lotes[lotes.length-1].n}, desde ${lotes[0].f})`:"")+`, ${excl.length} boleto(s) excluido(s). El agente recalculará esos días en la siguiente corrida.`;
+  m.className="nota ok"; $("#hiGuardar").disabled=false;
+}
+async function hiGuardar(){
+  if(!HI) return; const m=$("#hiMsg"), cuando=ahoraISO(), mot=$("#hiMot").value.trim(), cambios={};
+  cambios[`campanas/${HI.gk}/procedencia`]=HI.g;
+  HI.lotes.forEach(l=>{ cambios[`campanas/${HI.gk}/lotes/${l.n}`]={numero:l.n, desde_boleto:l.b, tope_kg:null, historico:true, fecha_inicio:l.f, firma:{quien:AUTH.email, cuando}}; });
+  HI.excl.forEach(x=>{ cambios[`campanas/${HI.gk}/excluidos/${x.b}`]={motivo:x.mo, quien:AUTH.email, cuando}; });
+  cambios[`campanas/${HI.gk}/historial/${idHist()}`]={cuando, quien:AUTH.email, motivo:mot,
+    que:`carga histórica: ${HI.lotes.length} campaña(s)${HI.lotes.length?" ("+HI.lotes.map(l=>l.n+"→"+l.b).join(", ")+")":""}; excluidos: ${HI.excl.map(x=>x.b).join(", ")||"ninguno"}`};
+  const viejas=HI.lotes.map(l=>l.f).sort();
+  cambios["campanas/_recalcular"]={id:String(Date.now()), dias: viejas.length ? diasDesde(viejas[0]) : 31};
+  try{ await fb("PATCH","/",cambios); m.textContent="Guardado. En la siguiente corrida el agente recalcula; puede tardar varios minutos."; m.className="nota ok";
+       $("#hiGuardar").disabled=true; HI=null; await cargarCampanas(); CAMP_DET=CP.datos; }
+  catch(e){ m.textContent=e.message; m.className="nota bad"; }
+}
+$("#hiRevisar").addEventListener("click",hiRevisar);
+$("#hiGuardar").addEventListener("click",hiGuardar);
+$("#hiProc").addEventListener("change",()=>{ HI=null; $("#hiGuardar").disabled=true; hiPintarExcl(); });
 $("#cpBol").addEventListener("change", validarBoleto);
 $("#cpGuardar").addEventListener("click", guardarNueva);
 
@@ -1606,7 +1683,7 @@ function pintarPulso(){
      numero suelto que no le dice nada a nadie. */
   if(!hoyAbierta){
     $("#pRitmo").textContent =
-      `Hoy la báscula se usó ${ev.length} ${ev.length===1?"vez":"veces"}. `+
+      ((n=>`Hoy pasaron ${n} ${n===1?"camión":"camiones"} (${ev.length} ${ev.length===1?"pesada":"pesadas"}). `)(new Set(ev.map(e=>e&&e.r&&e.r.boleto)).size))+
       `Vuelve a abrir a las ${HORA_ABRE}:00.`;
   } else if(tip && min!=null){
     $("#pRitmo").textContent = (min < uLenta)
@@ -2378,6 +2455,14 @@ async function campanaElegida(){
   const v=$("#fCamp").value;
   if(v && v!=="-"){
     const [gk,n]=v.split("|"), l=lotesDe((CAMP_DET||{})[gk]).find(x=>x.numero===Number(n));
+    if(l && l.fecha_inicio){
+      /* V19.4: campana historica, trae su fecha; se ve completa hasta que arranca la siguiente */
+      const ls=lotesDe((CAMP_DET||{})[gk]), sig=ls.filter(x=>x.numero>l.numero).sort((x,y)=>x.numero-y.numero)[0];
+      let hasta=S.fecha;
+      if(sig && sig.fecha_inicio) hasta=sig.fecha_inicio;
+      else if(sig && sig.desde_boleto){ const bs=await buscarBoleto(sig.desde_boleto); if(bs&&bs.fecha) hasta=bs.fecha; }
+      $("#fDesde").value=l.fecha_inicio; $("#fHasta").value=hasta; sincroFechas(); await cargarDetalle(); return;
+    }
     if(l && l.desde_boleto){
       const b=await buscarBoleto(l.desde_boleto);
       if(b && b.fecha && b.fecha < ($("#fDesde").value||S.fecha)){
@@ -2388,11 +2473,11 @@ async function campanaElegida(){
   pintarTabla();
 }
 
-function filtradas(){
+function filtradas(lista){
   const p=$("#fProc").value, pr=$("#fProd").value, cl=$("#fClase").value, cp=$("#fCamp").value;
   const t=($("#fTexto").value||"").trim().toLowerCase();
   const [cgk,cn]=(cp && cp!=="-") ? cp.split("|") : [null,null];
-  return S.detalle.filter(r=>{
+  return (lista||S.detalle).filter(r=>{
     if(cp==="-" && r.lote!=null) return false;
     if(cgk && (claveFb(r.grupo)!==cgk || Number(r.lote)!==Number(cn))) return false;
     if(p && r.procedencia!==p) return false;
@@ -2469,7 +2554,7 @@ function pintarTabla(){
   const kgOtr=f.filter(r=>!productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
   $("#pieN").textContent = f.length+" "+(f.length===1?"pesada":"pesadas")
     + (kgOtr? " · además "+nTon(kgOtr)+" t fuera del acarreo de mineral" : "");
-  if(S.detCorte) $("#pieN").textContent += " · OJO: máximo 62 días por consulta, se cortó al "+fechaCorta(S.detCorte+"T12:00:00")+" (también el CSV)";
+  if(S.detCorte) $("#pieN").textContent += " · En pantalla hasta el "+fechaCorta(S.detCorte+"T12:00:00")+" (máx. 62 días); el CSV sí trae todo el rango";
   $("#pieT").textContent = nTon(kgMin)+" t de mineral";
 }
 
@@ -2570,8 +2655,32 @@ $("#bLimpiar").addEventListener("click",()=>{
   $("#fProc").value=""; $("#fProd").value=""; $("#fClase").value=""; $("#fCamp").value=""; $("#fTexto").value="";
   $("#fDesde").value=S.fecha; $("#fHasta").value=S.fecha; sincroFechas(); cargarDetalle();
 });
-$("#bCsv").addEventListener("click",()=>{
-  const f=filtradas();
+function alertaPie(m){ $("#pieN").textContent="No se pudo bajar el CSV: "+m; }
+/* V19.4 · El CSV baja la seleccion COMPLETA aunque la pantalla se corte a
+   62 dias: pide el rango entero a Firebase en tramos de 3 meses y le
+   aplica los mismos filtros. */
+async function boletosRango(d, h){
+  const out=[], vistos=new Set(); let c=new Date(d+"T12:00:00"); const fin=new Date(h+"T12:00:00");
+  const iso=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");
+  while(c<=fin){
+    const t=new Date(c); t.setDate(t.getDate()+91); const hasta = t<fin ? t : fin;
+    const pack = await traer("/boletos", "orderBy="+encodeURIComponent('"$key"')+"&startAt="+encodeURIComponent('"'+iso(c)+'"')+"&endAt="+encodeURIComponent('"'+iso(hasta)+'"'));
+    if(pack===null) throw new Error("No se pudo leer el tramo desde "+iso(c));
+    Object.values(pack||{}).forEach(dia=>Object.values(dia||{}).forEach(r=>{ if(r && !vistos.has(r.boleto)){ vistos.add(r.boleto); out.push(r); } }));
+    $("#pieN").textContent="Preparando CSV… hasta "+fechaCorta(iso(hasta)+"T12:00:00");
+    c=new Date(hasta); c.setDate(c.getDate()+1);
+  }
+  return out;
+}
+$("#bCsv").addEventListener("click",async ()=>{
+  let f;
+  if(S.detCorte){
+    const b=$("#bCsv"); b.disabled=true;
+    try{ f=filtradas(await boletosRango($("#fDesde").value||S.fecha, $("#fHasta").value||S.fecha)); }
+    catch(e){ alertaPie(e.message); b.disabled=false; return; }
+    b.disabled=false; pintarTabla();
+  } else f=filtradas();
+  f.sort((a,b)=>String(a.entrada||"").localeCompare(String(b.entrada||"")));
   const cols=["boleto","entrada","salida","minutos_bascula","placas","chofer","procedencia","grupo","producto","clase","bruto","tara","neto","lote"];
   const csv=[cols.join(",")].concat(f.map(r=>cols.map(c=>{
     const v=r[c]==null?"":String(r[c]); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
@@ -2594,8 +2703,25 @@ function ocultarTip(){ $("#tip").style.opacity="0"; }
 /* ===================================================================
    CARGA
    =================================================================== */
+/* V19.4 · El resumen de TODOS los dias pesa cada vez mas (con 2025 cargado,
+   mas de un ano). Se baja completo al abrir y cada 30 min; en las vueltas
+   de cada 30 s solo se piden los ultimos 3 dias y se mezclan. Asi el
+   consumo de Firebase no crece con la historia. */
+const RESUMEN_COMPLETO_MS = 30*60000;
+async function traerResumen(){
+  const ahora = Date.now();
+  if(!S.resumenFull || ahora - S.resumenFull > RESUMEN_COMPLETO_MS){
+    const r = await traer("/resumen");
+    if(r){ S.resumenFull = ahora; return r; }
+    return S.resumen || {};
+  }
+  const d = new Date(); d.setDate(d.getDate()-3);
+  const desde = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  const parcial = await traer("/resumen", "orderBy="+encodeURIComponent('"$key"')+"&startAt="+encodeURIComponent('"'+desde+'"'));
+  return Object.assign({}, S.resumen || {}, parcial || {});
+}
 async function cargar(){
-  const [salud, resumen, patio, camp] = await Promise.all([traer("/salud"), traer("/resumen"), traer("/patio"),
+  const [salud, resumen, patio, camp] = await Promise.all([traer("/salud"), traerResumen(), traer("/patio"),
     traer("/campanas").catch(()=>null)]);
   CAMP_DET = camp || {};
   S.salud=salud; S.resumen=resumen||{}; S.patio=(patio&&patio.camiones)||[];
