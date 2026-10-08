@@ -528,6 +528,10 @@ th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
 .tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px;
        font-weight:600; background:var(--grid); color:var(--ink-2); }
 .tag.otro { background:color-mix(in srgb,var(--muted) 22%, transparent); color:var(--ink-2); }
+/* V19.3 · campana visible en Hoy y En patio */
+.tag.camp { background:color-mix(in srgb,var(--gold-ink) 16%, transparent); color:var(--gold-ink); }
+.fila .nom .nomtx { display:flex; flex-direction:column; min-width:0; }
+.fila .nom .camp-av { font-size:11px; font-weight:600; color:var(--gold-ink); margin-top:2px; }
 .proc { display:flex; align-items:center; gap:7px; }
 .proc span.t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 td .recorta { max-width:124px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -858,7 +862,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.2 · 7-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.3 · 7-oct-2026)</span>
   </p>
 </div>
 
@@ -1650,6 +1654,18 @@ const FEED_CAMPOS = [
 ];
 const FEED_SET = prefsLeer("flash-feed-cols", ["hora","boleto","producto","chofer","hace"]);
 
+/* V19.3 · La campana se muestra donde se vigila (Hoy, En patio), no solo
+   donde se busca (Detalle). El lote lo pone el agente; aqui solo se lee. */
+const tagCamp = r => (r && r.lote!=null) ? ` <span class="tag camp">Campaña ${esc(String(r.lote))}</span>` : "";
+function avanceCamp(grupo){
+  const gk = claveFb(grupo), c = (typeof CAMP_DET!=="undefined" && CAMP_DET) ? CAMP_DET[gk] : null;
+  const cur = c ? lotesDe(c)[0] : null;
+  if(!cur) return "";
+  const a = acumLote(gk, cur.numero);
+  let txt = "Campaña "+cur.numero+" · lleva "+tTon(a.kg)+" t";
+  if(cur.tope_kg>0) txt += " de "+tTon(cur.tope_kg)+" t ("+Math.min(999,Math.round(a.kg/cur.tope_kg*100))+"%)";
+  return txt;
+}
 function pintarFeed(){
   /* Un renglon por BOLETO, no por pesada: el cerrado se muestra con su
      pesada de salida y el que sigue en patio con su primera. Mostrar las
@@ -1686,7 +1702,7 @@ function pintarFeed(){
       ${ver("hora")?`<span class="hr">${hhmm(e.t)}</span>`:""}
       <span class="qn">
         <span class="chip" style="background:${planta?fondoChip(r.grupo):"var(--muted)"}"></span>
-        ${esc(r.procedencia||"—")}${ver("producto")&&r.producto?` <span class="prod">${esc(r.producto)}</span>`:""}
+        ${esc(r.procedencia||"—")}${ver("producto")&&r.producto?` <span class="prod">${esc(r.producto)}</span>`:""}${tagCamp(r)}
         ${e.abierta?'<span class="tag primera">1ª pesada · en patio</span>':""}
         ${det.length?`<em>${det.join(" · ")}</em>`:""}</span>
       <span class="tn">${peso!=null?nTon(peso)+" t":"—"}${e.abierta?'<small>bruto</small>':""}</span>
@@ -1726,7 +1742,7 @@ function pintarHoy(){
   const ult = S.dia.slice().sort((a,b)=>String(b.salida||b.entrada||"").localeCompare(String(a.salida||a.entrada||"")))[0];
   if(ult){
     $("#kUlt").textContent = nBoleto(ult.boleto);   // folio, no cantidad: sin coma de millares
-    $("#kUltDet").textContent = (ult.procedencia||"—")+" · "+hhmm(ult.salida||ult.entrada);
+    $("#kUltDet").textContent = (ult.procedencia||"—")+" · "+hhmm(ult.salida||ult.entrada)+(ult.lote!=null?" · Campaña "+ult.lote:"");
   } else { $("#kUlt").textContent="—"; $("#kUltDet").textContent="sin movimiento"; }
 
   /* Hoy en ceros no es una falla, pero sin contexto lo parece. Esta linea
@@ -1778,7 +1794,8 @@ function pintarBarras(min){
   caja.innerHTML = filas.map(([g,v],i)=>{
     const c = colorDe(g), f = fondoChip(g);
     return `<div class="fila">
-      <div class="nom"><span class="chip" style="background:${f}"></span>${esc(g)}</div>
+      <div class="nom"><span class="chip" style="background:${f}"></span><span class="nomtx">${esc(g)}${
+        (av=>av?`<span class="camp-av">${esc(av)}</span>`:"")(avanceCamp(g))}</span></div>
       <div class="pista"><div class="relleno" style="width:${(v.kg/max*100).toFixed(1)}%;background:${f}"></div></div>
       <div class="val">${nTon(v.kg)} t<small>${v.n} ${v.n===1?"viaje":"viajes"}</small></div>
     </div>`;
@@ -1909,7 +1926,7 @@ function pintarPatio(){
       <div class="meta">
         <span class="deDonde">
           <span class="chip" style="background:${planta?fondoChip(c.grupo):"var(--muted)"}"></span>
-          ${esc(c.procedencia||"sin procedencia")}${c.producto?` <span class="prod">${esc(c.producto)}</span>`:""}${
+          ${esc(c.procedencia||"sin procedencia")}${c.producto?` <span class="prod">${esc(c.producto)}</span>`:""}${tagCamp(c)}${
             c.clase && c.clase!==c.producto ? ` <span class="tag otro">${esc(c.clase)}</span>` : ""}</span>
         <em>${ident.join(" · ")}</em>
         <span class="pesada">${pe!=null
@@ -2318,6 +2335,7 @@ async function cargarDetalle(){
     dias.push(c.getFullYear()+"-"+String(c.getMonth()+1).padStart(2,"0")+"-"+String(c.getDate()).padStart(2,"0"));
     c.setDate(c.getDate()+1);
   }
+  S.detCorte = (c<=fin) ? dias[dias.length-1] : null;   // V19.3: avisar si el rango se corto a 62 dias
   const packs = await Promise.all(dias.map(f=>traer("/boletos/"+f)));
   S.detalle=[];
   packs.forEach(p=>{ if(p) Object.values(p).forEach(r=>S.detalle.push(r)); });
@@ -2451,6 +2469,7 @@ function pintarTabla(){
   const kgOtr=f.filter(r=>!productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
   $("#pieN").textContent = f.length+" "+(f.length===1?"pesada":"pesadas")
     + (kgOtr? " · además "+nTon(kgOtr)+" t fuera del acarreo de mineral" : "");
+  if(S.detCorte) $("#pieN").textContent += " · OJO: máximo 62 días por consulta, se cortó al "+fechaCorta(S.detCorte+"T12:00:00")+" (también el CSV)";
   $("#pieT").textContent = nTon(kgMin)+" t de mineral";
 }
 
@@ -2576,7 +2595,9 @@ function ocultarTip(){ $("#tip").style.opacity="0"; }
    CARGA
    =================================================================== */
 async function cargar(){
-  const [salud, resumen, patio] = await Promise.all([traer("/salud"), traer("/resumen"), traer("/patio")]);
+  const [salud, resumen, patio, camp] = await Promise.all([traer("/salud"), traer("/resumen"), traer("/patio"),
+    traer("/campanas").catch(()=>null)]);
+  CAMP_DET = camp || {};
   S.salud=salud; S.resumen=resumen||{}; S.patio=(patio&&patio.camiones)||[];
 
   /* CORTE DIARIO. "Hoy" es hoy, siempre, aunque todavia no haya pesadas.
