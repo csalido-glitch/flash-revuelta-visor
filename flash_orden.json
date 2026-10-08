@@ -1,7 +1,6 @@
 {
-  "_nota": "V4.2: boletos excluidos por procedencia (/campanas/<grupo>/excluidos) no reciben campaña. Todo lo demás igual que V4.1.",
-  "id": "v42-excluidos",
-  "carga_dias": 0,
+  "_nota": "V4.2b: corrige lectura de campañas cuando Firebase las regresa como lista (lotes 1..25). Carga completa desde el 1-ene-25 con campañas y excluidos; reasigna también Cerro Blanco. Una sola vez por id.",
+  "id": "carga-2025-completa-b",
   "config": {
     "dias_hacia_atras": 2,
     "equipo_esperado": "TI-00023",
@@ -10,7 +9,8 @@
     "campanas": true
   },
   "actualizar": {
-    "sha256": "9f1527c1b4a8b8ee94f546243fe39af1f6a2c04db5c7dc2a76506e737b329f4a",
+    "sha256": "9fed2ea699f1b73cf8f9b3bd83beacc85f10d429560ff3ca8df3f634f70511c3",
     "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
-  }
+  },
+  "carga_desde": "2025-01-01"
 }
