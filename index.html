@@ -879,7 +879,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.5 · 8-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.6 · 9-oct-2026)</span>
   </p>
 </div>
 
@@ -1032,7 +1032,7 @@ function mostrarLogin(t, c){
 }
 window.addEventListener("resize",()=>{ const L=$("#login"), B=document.querySelector(".banner-mrt");
   if(L && !L.classList.contains("oculto")) L.style.paddingTop=((B?B.offsetHeight:0)+40)+"px"; });
-const EXCEPCIONES = ["bascula.cieneguita@mrt.mx"];   // V19.1: correos fuera del dominio, autorizados por JC
+const EXCEPCIONES = ["bascula.cieneguita@mrt.mx", "produccion.cieneguita@mrt.mx", "laboratorio.cieneguita@mrt.mx"];   // V19.1/V19.6: correos fuera del dominio (responsable: César)
 const correoValido = e => (e.endsWith(DOMINIO) && e.length > DOMINIO.length) || EXCEPCIONES.includes(e);
 
 $("#lCrear").addEventListener("click", ()=>{
