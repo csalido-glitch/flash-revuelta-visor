@@ -37,6 +37,16 @@ V4.1 - Campanas por boleto y cierre automatico por tope
   el boleto de la siguiente (siguiente_boleto), se respeta ese. Cada apertura
   automatica queda en el historial de la campana. Todo va envuelto: si algo
   falla, los boletos se envian igual que en la V4.0.
+
+V4.3 - Viajes de 2025 capturados a mano en Excel
+  Mientras Revuelta estuvo caido (antes del 11-nov-25) los viajes se
+  anotaron en Excel. La orden puede traer "excel": {id, url, sha256}; el
+  agente baja ese archivo UNA vez, lo guarda junto a si mismo
+  (excel_2025.json) y lo mezcla con lo de bascula cada vez que procesa uno
+  de esos dias. Cada viaje lleva llave propia XLSnn-fila (nunca choca con un
+  boleto real) y origen_dato = "excel". Bascula manda: el archivo solo trae
+  dias sin bascula o viajes que bascula no tiene. Si el archivo falta o no
+  cuadra su huella, el agente trabaja exactamente como la V4.2.
 """
 
 import hashlib
@@ -52,7 +62,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.2"
+VERSION = "4.3"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -93,6 +103,9 @@ ARCHIVO_ORDENES = os.path.join(BASE, "ordenes_hechas.txt")
 ARCHIVO_YOMISMO = os.path.abspath(__file__)
 ARCHIVO_RESPALDO = os.path.join(BASE, "flash_agente.bak")
 ARCHIVO_ACTUALIZACIONES = os.path.join(BASE, "actualizaciones.txt")
+ARCHIVO_EXCEL = os.path.join(BASE, "excel_2025.json")   # V4.3
+EXCEL_MAX = 10 * 1024 * 1024
+EXCEL = {}            # fecha aaaa-mm-dd -> [registros de Excel]
 
 # Huellas que debe tener un candidato para que lo aceptemos como agente
 # legitimo. Evita que un archivo cualquiera termine reemplazando al agente.
@@ -1359,6 +1372,65 @@ def armar_resumen(fecha_k, registros):
     }
 
 
+def _leer_excel_local():
+    EXCEL.clear()
+    if not os.path.exists(ARCHIVO_EXCEL):
+        return 0
+    with open(ARCHIVO_EXCEL, "r", encoding="utf-8") as f:
+        doc = json.load(f)
+    n = 0
+    for r in (doc.get("viajes") or []):
+        if not isinstance(r, dict) or not r.get("fecha") or not r.get("boleto"):
+            continue
+        if not re.fullmatch(r"XLS[0-9A-Z]{2}-[0-9]+", str(r["boleto"])):
+            continue
+        r = dict(r)
+        r["lote"] = None
+        r["agente"] = VERSION
+        EXCEL.setdefault(r["fecha"][:10], []).append(r)
+        n += 1
+    return n
+
+
+def preparar_excel(orden):
+    """V4.3. Baja (si hace falta) y lee el archivo de viajes de Excel.
+    Devuelve el id de la carga si esta corrida debe hacerla, si no None.
+    Nunca revienta: si algo falla, EXCEL queda vacio y todo sigue como V4.2."""
+    pedido = (orden or {}).get("excel") or {}
+    esperada = str(pedido.get("sha256") or "").strip().lower()
+    url = str(pedido.get("url") or "").strip()
+    ident = str(pedido.get("id") or "").strip()
+    try:
+        if re.fullmatch(r"[0-9a-f]{64}", esperada) and url.startswith("https://"):
+            actual = _huella(ARCHIVO_EXCEL) if os.path.exists(ARCHIVO_EXCEL) else ""
+            if actual != esperada:
+                req = urllib.request.Request(url, headers={
+                    "Cache-Control": "no-cache", "User-Agent": "FlashAcarreo/%s" % VERSION})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    datos = r.read(EXCEL_MAX + 1)
+                huella = hashlib.sha256(datos).hexdigest()
+                if huella != esperada or len(datos) > EXCEL_MAX:
+                    log("Excel 2025: la huella no cuadra (%s... vs %s...). No se usa."
+                        % (huella[:12], esperada[:12]), "WARN")
+                    return None
+                json.loads(datos.decode("utf-8"))      # que sea JSON valido
+                tmp = ARCHIVO_EXCEL + ".nuevo"
+                with open(tmp, "wb") as f:
+                    f.write(datos)
+                os.replace(tmp, ARCHIVO_EXCEL)
+                log("Excel 2025: archivo nuevo guardado (%d bytes)." % len(datos))
+        n = _leer_excel_local()
+    except Exception as e:
+        EXCEL.clear()
+        log("Excel 2025: no se pudo preparar (%s). Corrida sin Excel." % e, "WARN")
+        return None
+    if n:
+        log("Excel 2025: %d viajes en %d dias." % (n, len(EXCEL)))
+    if n and ident and not orden_ya_hecha("excel-" + ident):
+        return "excel-" + ident
+    return None
+
+
 def rango_dia(fecha):
     d = fecha.strftime("%Y-%m-%d")
     return "%s 00:00" % d, "%s 23:59" % d
@@ -1492,6 +1564,17 @@ def main():
 
     dias = [hoy - timedelta(days=i) for i in range(0, n_dias + 1)]
 
+    # V4.3: viajes de Excel. En la corrida de la carga se agregan sus dias.
+    carga_xls = preparar_excel(orden)
+    if carga_xls:
+        ya = {d.strftime("%Y-%m-%d") for d in dias}
+        for f in EXCEL:
+            if f not in ya:
+                dias.append(datetime.strptime(f, "%Y-%m-%d"))
+        dias.sort(reverse=True)
+        log("CARGA EXCEL '%s': %d dias a procesar." % (carga_xls, len(dias)))
+    xls_falla = False
+
     total_cerrados = 0
     resumen_dia = {}
 
@@ -1503,6 +1586,8 @@ def main():
         desde, hasta = rango_dia(d)
         crudos = leer_webservice(CFG["ws_cerrados"], desde, hasta)
         if crudos is None:
+            if d.strftime("%Y-%m-%d") in EXCEL:
+                xls_falla = True     # sin bascula no se mezcla: se reintenta
             continue
         registros = [r for r in (normalizar(c, abierto=False) for c in crudos) if r]
         leidos.append((d, d.strftime("%Y-%m-%d"), registros))
@@ -1529,12 +1614,21 @@ def main():
             enviar("boletos/%s/%d" % (fecha_k, r["boleto"]), r)
         total_cerrados += len(registros)
 
+        # V4.3: los de Excel de ese dia van con su llave XLS y sin lote,
+        # y entran al resumen junto con los de bascula.
+        xls = EXCEL.get(fecha_k) or []
+        for r in xls:
+            enviar("boletos/%s/%s" % (fecha_k, r["boleto"]), r)
+        if xls:
+            registros = registros + xls
+            total_cerrados += len(xls)
+
         # durante una carga larga, avisa por Dropbox como va
-        if carga and (idx % 10 == 0 or idx == len(leidos) - 1):
+        if (carga or carga_xls) and (idx % 10 == 0 or idx == len(leidos) - 1):
             vaciar_lote()
             escribir_estado({
                 "agente": VERSION, "equipo": os.environ.get("COMPUTERNAME", "?"),
-                "modo": "carga historica en curso", "orden": carga,
+                "modo": "carga historica en curso", "orden": carga or carga_xls,
                 "avance": "%d de %d dias" % (idx + 1, len(leidos)),
                 "pct": round((idx + 1) / max(1, len(leidos)) * 100),
                 "boletos_hasta_ahora": total_cerrados,
@@ -1586,6 +1680,14 @@ def main():
         marcar_orden(recalculo)
         log("RECALCULO terminado sobre %d dias." % len(dias))
 
+    if carga_xls:
+        if xls_falla or RED_CAIDA[0]:
+            log("CARGA EXCEL incompleta (bascula o red fallaron). Se repite en la siguiente corrida.", "WARN")
+            carga_xls = None
+        else:
+            marcar_orden(carga_xls)
+            log("CARGA EXCEL terminada: %d viajes." % sum(len(v) for v in EXCEL.values()))
+
     if carga:
         marcar_orden(carga)
         log("CARGA HISTORICA terminada: %d dias, %d boletos." % (len(dias), total_cerrados))
@@ -1609,6 +1711,8 @@ def main():
         "peticiones_firebase": ENVIADOS[1],
         "dias_revisados": len(dias),
         "carga_historica": carga or None,
+        "carga_excel": carga_xls or None,
+        "excel_viajes": sum(len(v) for v in EXCEL.values()) or None,
         "lotes_cargados": n_campanas,
         "campanas_abiertas": campanas_abiertas or None,
         "recalculo": recalculo or None,

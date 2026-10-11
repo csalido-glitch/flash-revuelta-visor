@@ -1,6 +1,7 @@
 {
-  "_nota": "V4.2b: corrige lectura de campañas cuando Firebase las regresa como lista (lotes 1..25). Carga completa desde el 1-ene-25 con campañas y excluidos; reasigna también Cerro Blanco. Una sola vez por id.",
+  "_nota": "V4.3: viajes de 2025 capturados en Excel (antes del 11-nov-25 y huecos 11, 17 y 18-nov-25). Se cargan UNA vez por id de 'excel'. La carga de bascula 2025 ya hecha conserva su id y no se repite.",
   "id": "carga-2025-completa-b",
+  "carga_desde": "2025-01-01",
   "config": {
     "dias_hacia_atras": 2,
     "equipo_esperado": "TI-00023",
@@ -8,9 +9,13 @@
     "estado_cada_min": 15,
     "campanas": true
   },
-  "actualizar": {
-    "sha256": "9fed2ea699f1b73cf8f9b3bd83beacc85f10d429560ff3ca8df3f634f70511c3",
-    "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
+  "excel": {
+    "id": "2025-a",
+    "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/excel_2025.json",
+    "sha256": "42e68f5149ec0128623d351ff75720cb43e6c37ecab99dbbea9ef52a8785a585"
   },
-  "carga_desde": "2025-01-01"
+  "actualizar": {
+    "sha256": "7ef904507f7877ad5bc3a3cfc2d5d6fee3968976658962886e58b6b04671dc71",
+    "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
+  }
 }
