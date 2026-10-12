@@ -879,7 +879,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual.<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.6 · 9-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.7 · 11-oct-2026)</span>
   </p>
 </div>
 
@@ -2536,8 +2536,8 @@ const DET_SET = prefsLeer("flash-det-cols", []);
 
 function celdaDet(k, r, mineral){
   switch(k){
-    case "boleto":  return `<td class="num">${nBoleto(r.boleto)}${(r.alertas||[]).length?' <span class="alerta-dato">!</span>':''}</td>`;
-    case "entrada": return `<td>${fechaCorta(r.entrada)} ${hhmm(r.entrada)}</td>`;
+    case "boleto":  return `<td class="num">${nBoleto(r.boleto)}${r.origen_dato==="excel"?' <span class="tag otro" title="Capturado a mano en Excel (Revuelta caído)'+(r.folio_excel?' · folio '+esc(r.folio_excel):'')+'">Excel</span>':''}${(r.alertas||[]).length?' <span class="alerta-dato">!</span>':''}</td>`;
+    case "entrada": return `<td>${fechaCorta(r.entrada)} ${r.origen_dato==="excel"?"s/h":hhmm(r.entrada)}</td>`;
     case "salida":  return `<td>${hhmm(r.salida)}</td>`;
     case "minutos_bascula": return `<td class="num">${r.minutos_bascula==null?"—":r.minutos_bascula}</td>`;
     case "placas":  return `<td>${esc(r.placas)}</td>`;
@@ -2559,7 +2559,7 @@ function pintarTabla(){
   fijarColores();
   const f=filtradas(), o=S.orden;
   f.sort((a,b)=>{ let x=a[o.c],y=b[o.c];
-    if(typeof x==="number"||typeof y==="number"){ x=x||0;y=y||0; return o.asc?x-y:y-x; }
+    if((typeof x==="number"||x==null)&&(typeof y==="number"||y==null)){ x=x||0;y=y||0; return o.asc?x-y:y-x; }
     x=String(x||"");y=String(y||""); return o.asc?x.localeCompare(y):y.localeCompare(x); });
 
   const cols = DET_COLS.filter(c=>c.fija || DET_SET.has(c.k));
@@ -2709,7 +2709,7 @@ $("#bCsv").addEventListener("click",async ()=>{
     b.disabled=false; pintarTabla();
   } else f=filtradas();
   f.sort((a,b)=>String(a.entrada||"").localeCompare(String(b.entrada||"")));
-  const cols=["boleto","entrada","salida","minutos_bascula","placas","chofer","procedencia","grupo","producto","clase","bruto","tara","neto","lote"];
+  const cols=["boleto","entrada","salida","minutos_bascula","placas","chofer","procedencia","grupo","producto","clase","bruto","tara","neto","lote","origen_dato","folio_excel","excel_archivo","excel_fila"];
   const csv=[cols.join(",")].concat(f.map(r=>cols.map(c=>{
     const v=r[c]==null?"":String(r[c]); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
   }).join(","))).join("\n");
