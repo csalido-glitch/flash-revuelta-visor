@@ -497,6 +497,16 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .cal .piecal button:hover { border-color:var(--gold); color:var(--gold-ink); }
 
 .tabla-caja { overflow-x:auto; border:1px solid var(--border); border-radius:12px; }
+/* V19.8 · Campanas detalle */
+#cdTabla thead th { cursor:default; }
+#cdBody tr.cd-lote { cursor:pointer; }
+#cdBody tr.cd-lote td:first-child::before { content:"▸ "; color:var(--muted); }
+#cdBody tr.cd-lote.abierta td:first-child::before { content:"▾ "; color:var(--gold-ink); }
+#cdBody tr.cd-lote.abierta { background:var(--plane); }
+#cdBody tr.cd-det > td { padding:0 0 12px 22px; background:var(--plane); white-space:normal; }
+#cdBody tr.cd-det table { font-size:12px; }
+#cdBody tr.cd-det thead th { background:color-mix(in srgb,var(--navy) 82%, transparent); cursor:default; }
+.cd-barra { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 4px; font-size:12.5px; color:var(--ink-2); }
 table { width:100%; border-collapse:collapse; font-size:12.5px; }
 th, td { padding:8px 10px; text-align:left; white-space:nowrap; }
 thead th { position:sticky; top:0; background:var(--navy); color:#fff;
@@ -625,6 +635,7 @@ details summary{cursor:pointer}
       <button class="tab" role="tab" aria-selected="false" data-t="patio">En patio<span class="badge" id="bPatio">0</span></button>
       <button class="tab" role="tab" aria-selected="false" data-t="detalle">Detalle</button>
       <button class="tab" role="tab" aria-selected="false" data-t="historico">Histórico</button>
+      <button class="tab" role="tab" aria-selected="false" data-t="cdet">Campañas detalle</button>
       <button class="tab oculto" role="tab" aria-selected="false" data-t="campanas">Campañas</button>
       <button class="tab oculto" role="tab" aria-selected="false" data-t="usuarios">Usuarios</button>
     </nav>
@@ -806,6 +817,24 @@ details summary{cursor:pointer}
         <span id="pieN">—</span>
         <strong id="pieT">—</strong>
       </div>
+    </div>
+  </section>
+
+  <!-- ================= CAMPANAS DETALLE (V19.8, para todos) ================= -->
+  <section id="p-cdet" class="oculto">
+    <div class="card">
+      <h2>Campañas detalle</h2>
+      <p class="sub">Acumulado de cada campaña de mineral. Pica una campaña para ver todos sus camiones.</p>
+      <div class="filtros">
+        <div class="campo"><label for="cdProc">Procedencia</label><select id="cdProc"></select></div>
+      </div>
+      <div class="tabla-caja">
+        <table id="cdTabla">
+          <thead><tr><th class="num">Campaña</th><th>Fecha inicial</th><th>Última fecha</th><th class="num">Camiones</th><th class="num">Toneladas</th><th>Estado</th></tr></thead>
+          <tbody id="cdBody"></tbody>
+        </table>
+      </div>
+      <div class="resumen-tabla"><span id="cdPieN">—</span><strong id="cdPieT">—</strong></div>
     </div>
   </section>
 
@@ -1527,9 +1556,116 @@ function pintarCasillas(caja, campos, set, clave, alCambiar, fijasTxt){
 /* ===================================================================
    PESTAÑAS
    =================================================================== */
+/* ===================================================================
+   V19.8 · CAMPANAS DETALLE (para todos los que consultan)
+   El acumulado sale del resumen diario (por_lote): solo lo que va a
+   planta, igual que el gestor. Al abrir una campana se bajan sus boletos
+   del rango de fechas en que tuvo viajes, en tramos de 91 dias.
+   =================================================================== */
+const CD = { abiertas:new Set(), cache:{} };
+const cdFecha = iso => { const p=isoAPartes(String(iso||"").slice(0,10)); return p ? p[2]+"-"+MES_CORTO[p[1]-1]+"-"+String(p[0]).slice(2) : "—"; };
+function cdGrupos(){
+  return Object.keys(CAMP_DET||{}).filter(k => !k.startsWith("_") && lotesDe(CAMP_DET[k]).length)
+    .sort((a,b)=>String((CAMP_DET[a]||{}).procedencia||a).localeCompare(String((CAMP_DET[b]||{}).procedencia||b)));
+}
+function cdLotes(gk){
+  const m = {};
+  lotesDe(CAMP_DET[gk]).forEach(l => { m[l.numero] = {n:l.numero, l, viajes:0, kg:0, f1:null, f2:null}; });
+  Object.keys(S.resumen||{}).sort().forEach(f => {
+    const x = ((S.resumen[f]||{}).por_lote||{})[gk]; if(!x) return;
+    Object.keys(x).forEach(k => { const y=x[k]; if(!y) return; const n=Number(k);
+      const o = m[n] || (m[n] = {n, l:null, viajes:0, kg:0, f1:null, f2:null});
+      o.viajes += y.viajes||0; o.kg += y.kg||0; if(y.viajes){ if(!o.f1) o.f1=f; o.f2=f; } });
+  });
+  return Object.values(m).filter(o=>!isNaN(o.n) && o.n>0).sort((a,b)=>a.n-b.n);
+}
+function pintarCdet(){
+  const sel = $("#cdProc"), gs = cdGrupos(), prev = sel.value;
+  sel.innerHTML = gs.length ? gs.map(g=>`<option value="${esc(g)}">${esc((CAMP_DET[g]||{}).procedencia||g)}</option>`).join("")
+                            : `<option value="">Sin campañas</option>`;
+  if(gs.includes(prev)) sel.value = prev;
+  const gk = sel.value;
+  if(!gk){ $("#cdBody").innerHTML = `<tr><td colspan="6"><div class="vacio">Todavía no hay campañas.</div></td></tr>`;
+           $("#cdPieN").textContent="—"; $("#cdPieT").textContent="—"; return; }
+  const ls = cdLotes(gk), ult = ls.length ? ls[ls.length-1].n : null;
+  $("#cdBody").innerHTML = ls.map(o => {
+    const llave = gk+"|"+o.n, ab = CD.abiertas.has(llave);
+    const ini = o.f1 || (o.l && o.l.fecha_inicio) || null;
+    return `<tr class="cd-lote${ab?" abierta":""}" data-k="${esc(llave)}">
+        <td class="num"><b>${o.n}</b></td>
+        <td>${ini?cdFecha(ini):"—"}</td>
+        <td>${o.f2?cdFecha(o.f2):"—"}</td>
+        <td class="num">${o.viajes.toLocaleString("es-MX")}</td>
+        <td class="num"><b>${tTon(o.kg)}</b></td>
+        <td>${o.n===ult?'<span class="tag camp">En curso</span>':'<span class="tag otro">Cerrada</span>'}</td></tr>`
+      + (ab ? `<tr class="cd-det"><td colspan="6"><div id="cdD-${esc(llave).replace(/[^\w-]/g,"_")}">${cdDetalleHtml(llave)}</div></td></tr>` : "");
+  }).join("") || `<tr><td colspan="6"><div class="vacio">Sin datos.</div></td></tr>`;
+  const tv = ls.reduce((a,o)=>a+o.viajes,0), tk = ls.reduce((a,o)=>a+o.kg,0);
+  $("#cdPieN").textContent = ls.length+" "+(ls.length===1?"campaña":"campañas")+" · "+tv.toLocaleString("es-MX")+" camiones";
+  $("#cdPieT").textContent = tTon(tk)+" t";
+  $$("#cdBody tr.cd-lote").forEach(tr => tr.addEventListener("click", ()=>{
+    const k = tr.dataset.k;
+    if(CD.abiertas.has(k)) CD.abiertas.delete(k); else { CD.abiertas.add(k); cdTraer(k); }
+    pintarCdet();
+  }));
+  $$("#cdBody button[data-csv]").forEach(b => b.addEventListener("click", e=>{ e.stopPropagation(); cdCsv(b.dataset.csv); }));
+}
+async function cdTraer(llave){
+  if(CD.cache[llave]) return;
+  const [gk, n] = llave.split("|"), o = cdLotes(gk).find(x=>x.n===Number(n));
+  if(!o || !o.f1){ CD.cache[llave] = {filas:[]}; return; }
+  CD.cache[llave] = {cargando:true};
+  try{
+    const out=[], vistos=new Set(); let c=new Date(o.f1+"T12:00:00"); const fin=new Date(o.f2+"T12:00:00");
+    while(c<=fin){
+      const t=new Date(c); t.setDate(t.getDate()+91); const h = t<fin ? t : fin;
+      const pack = await traer("/boletos", "orderBy="+encodeURIComponent('"$key"')+"&startAt="+encodeURIComponent('"'+isoDe(c)+'"')+"&endAt="+encodeURIComponent('"'+isoDe(h)+'"'));
+      if(pack===null) throw new Error("no se pudo leer");
+      Object.values(pack||{}).forEach(dia=>Object.values(dia||{}).forEach(r=>{
+        if(r && !vistos.has(r.boleto) && claveFb(r.grupo)===gk && Number(r.lote)===Number(n) && productoEsPlanta(r.producto, r.grupo)){
+          vistos.add(r.boleto); out.push(r); } }));
+      c=new Date(h); c.setDate(c.getDate()+1);
+    }
+    out.sort((a,b)=>String(a.entrada||"").localeCompare(String(b.entrada||"")) || cmpBoleto(a.boleto,b.boleto));
+    let ac=0; out.forEach((r,i)=>{ r.__n=i+1; ac+=r.neto||0; r.__ac=ac; });
+    CD.cache[llave] = {filas:out};
+  }catch(e){ CD.cache[llave] = {error:true}; }
+  if(!$("#p-cdet").classList.contains("oculto")) pintarCdet();
+}
+function cdDetalleHtml(llave){
+  const d = CD.cache[llave];
+  if(!d || d.cargando) return `<div class="cd-barra">Cargando camiones…</div>`;
+  if(d.error){ delete CD.cache[llave]; return `<div class="cd-barra">No se pudieron leer los camiones. Cierra y vuelve a abrir la campaña.</div>`; }
+  if(!d.filas.length) return `<div class="cd-barra">Sin camiones registrados.</div>`;
+  const kg = d.filas.reduce((a,r)=>a+(r.neto||0),0);
+  return `<div class="cd-barra"><span>${d.filas.length} camiones · ${tTon(kg)} t</span>
+      <button class="btn" data-csv="${esc(llave)}">Descargar CSV de esta campaña</button></div>
+    <div class="tabla-caja"><table><thead><tr><th class="num">#</th><th class="num">Boleto</th><th>Entrada</th><th>Placas</th><th>Chofer</th><th>Producto</th>
+      <th class="num">Bruto</th><th class="num">Tara</th><th class="num">Neto</th><th class="num">Acumulado (t)</th></tr></thead><tbody>`
+    + d.filas.map(r=>`<tr><td class="num" style="color:var(--muted)">${r.__n}</td>
+        <td class="num">${nBoleto(r.boleto)}${r.origen_dato==="excel"?' <span class="tag otro">Excel</span>':''}</td>
+        <td>${fechaCorta(r.entrada)} ${r.origen_dato==="excel"?"s/h":hhmm(r.entrada)}</td>
+        <td>${esc(r.placas||"—")}</td><td><div class="recorta ancha" title="${esc(r.chofer)}">${esc(r.chofer||"—")}</div></td>
+        <td>${esc(r.producto||"—")}</td><td class="num">${nNum(r.bruto)}</td><td class="num">${nNum(r.tara)}</td>
+        <td class="num"><b>${nNum(r.neto)}</b></td><td class="num">${tTon(r.__ac)}</td></tr>`).join("")
+    + `</tbody></table></div>`;
+}
+function cdCsv(llave){
+  const d = CD.cache[llave]; if(!d || !d.filas) return;
+  const [gk, n] = llave.split("|");
+  const cols=["__n","boleto","entrada","salida","placas","chofer","procedencia","producto","bruto","tara","neto","lote","origen_dato","folio_excel"];
+  const csv=[cols.map(c=>c==="__n"?"#":c).join(",")].concat(d.filas.map(r=>cols.map(c=>{
+    const v=r[c]==null?"":String(r[c]); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(","))).join("\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));
+  a.download="campana_"+gk.replace(/[^\w]+/g,"_")+"_"+n+".csv"; a.click(); URL.revokeObjectURL(a.href);
+}
+$("#cdProc").addEventListener("change", pintarCdet);
+
 $$(".tab").forEach(b => b.addEventListener("click", ()=>{
   $$(".tab").forEach(x => x.setAttribute("aria-selected", x===b ? "true":"false"));
-  ["hoy","patio","historico","detalle","campanas","usuarios"].forEach(t => $("#p-"+t).classList.toggle("oculto", t!==b.dataset.t));
+  ["hoy","patio","historico","cdet","detalle","campanas","usuarios"].forEach(t => $("#p-"+t).classList.toggle("oculto", t!==b.dataset.t));
+  if(b.dataset.t==="cdet") pintarCdet();
   if(b.dataset.t==="campanas") cargarCampanas();
   if(b.dataset.t==="usuarios") cargarUsuarios();
   if(b.dataset.t==="detalle") cargarDetalle();
@@ -2792,6 +2928,7 @@ async function cargar(){
 
   sello(); pintarHoy(); pintarPatio();
   if(!$("#p-historico").classList.contains("oculto")) pintarHistorico();
+  if(!$("#p-cdet").classList.contains("oculto")) pintarCdet();
   if(!$("#p-detalle").classList.contains("oculto")) cargarDetalle();
 }
 
