@@ -584,6 +584,7 @@ body.con-login{overflow:hidden}
 .pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;font-weight:700}
 .pill.azul{background:color-mix(in srgb,var(--s1) 14%,transparent);color:var(--s1)}
 .pill.oro{background:color-mix(in srgb,var(--gold) 22%,transparent);color:var(--gold-ink)}
+.cp-alerta{margin-top:6px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--gold-ink);font-size:12.5px}
 .cpchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
 .cpchip{border:1px dashed var(--axis);border-radius:16px;padding:4px 12px;font-size:13px;background:var(--plane);cursor:pointer;color:var(--ink)}
 .cpchip:hover{border-color:var(--gold)}
@@ -859,6 +860,23 @@ details summary{cursor:pointer}
       <div class="nota" id="cpMsg"></div>
     </div>
     <div class="card">
+      <h2>Cortes por día</h2>
+      <p class="sub">Para cuadrar con el introductor: cada campaña son <b>días completos</b> y arranca con el primer camión del día que indiques.
+        Escribe desde qué campaña aplica y un renglón por campaña: <b>número, día de arranque</b>. Las campañas anteriores no se tocan;
+        las de ese número en adelante se reemplazan. La última queda en curso y no se cierra sola: el visor avisa cuando se acerca al tope de referencia.</p>
+      <div class="forma">
+        <div class="campo"><label>Procedencia</label><select id="rdProc"></select></div>
+        <div class="campo"><label>Desde la campaña número</label><input id="rdNum" type="number" min="1" placeholder="ej. 25"></div>
+        <div class="campo"><label>Tope de referencia (t)</label><input id="rdRef" type="number" step="1" min="1" value="1000"><div class="nota">solo para el aviso</div></div>
+        <div class="campo" style="grid-column:1/-1"><label>Campañas (número, día de arranque)</label>
+          <textarea id="rdLista" rows="5" placeholder="25, 2-oct-26&#10;26, 11-oct-26&#10;27, 14-oct-26"></textarea></div>
+        <div class="campo" style="grid-column:1/-1"><label>Motivo (obligatorio)</label><input id="rdMot" placeholder="ej. Correo Felipe Gutiérrez 14-oct-26: lotes 25 y 26 cerrados"></div>
+        <div><button class="btn" id="rdCalc">Calcular vista previa</button> <button class="btn pri" id="rdAplicar" disabled>Aplicar cortes</button></div>
+      </div>
+      <div class="nota" id="rdMsg"></div>
+      <div id="rdPrev"></div>
+    </div>
+    <div class="card">
       <h2>Carga histórica de campañas</h2>
       <p class="sub">Para dar de alta campañas YA CERRADAS, todas debajo de la vigente. Un renglón por campaña:
         <b>número, boleto inicial, fecha (aaaa-mm-dd)</b>. Opcional: boletos a excluir (no cuentan en ninguna campaña).</p>
@@ -908,7 +926,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.8 · 11-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.9 · 14-oct-2026)</span>
   </p>
 </div>
 
@@ -1195,13 +1213,29 @@ async function cargarCampanas(){
     Object.keys((d && d.no_planta_por_grupo) || {}).forEach(g => CP.otros.add(g));
   });
   CP.mineral.forEach(g => CP.otros.delete(g));
-  pintarCampanas(); hiLlenar();
+  pintarCampanas(); hiLlenar(); rdLlenar();
 }
 function pintarCampanas(){
   const filas = [];
   Object.keys(CP.datos).filter(k => !k.startsWith("_")).sort().forEach(gk => {
     const lotes = lotesDe(CP.datos[gk]); if(!lotes.length) return;
-    const cur = lotes[0], a = acumLote(gk, cur.numero), tope = Number(cur.tope_kg) || 0;
+    /* V19.9: si la mas nueva es un cierre programado (arranca mañana o despues), la vigente es la anterior */
+    const prog = (lotes[0].desde && !lotes[0].desde_boleto && String(lotes[0].desde).slice(0,10) > hoyISO() && lotes.length>1) ? lotes[0] : null;
+    const cur = prog ? lotes[1] : lotes[0], a = acumLote(gk, cur.numero), tope = Number(cur.tope_kg) || 0;
+    if(!tope && cur.tope_ref_kg){
+      const ref = Number(cur.tope_ref_kg), pct = Math.min(100, a.kg/ref*100), cerca = a.kg >= ref*0.9;
+      let sigD;
+      if(prog) sigD = `<span class="pill oro">Campaña ${prog.numero}</span> arranca el <b>${cdFecha(prog.desde)}</b><div class="nota">cierre programado: esta termina al acabar el ${cdFecha(diaAntes(prog.desde))}</div><button class="btn" data-cancelar="${esc(gk)}">Cancelar cierre</button>`;
+      else sigD = `<div class="nota">días completos · referencia ${tTon(ref)} t · faltan ${tTon(Math.max(0,ref-a.kg))} t</div>`
+        + (cerca ? `<div class="cp-alerta">⚠ Lleva ${tTon(a.kg)} t de ~${tTon(ref)} t. ¿Se cierra al terminar hoy?</div>` : "")
+        + `<button class="btn" data-cerrar="${esc(gk)}">Cerrar al terminar hoy</button>`;
+      filas.push(`<tr><td class="wrap"><b>${esc(nombreDe(gk))}</b></td><td><span class="pill azul">${cur.numero}</span></td>
+        <td class="wrap">${cur.desde_boleto!=null ? "boleto <b>"+nBoleto(cur.desde_boleto)+"</b>" : esc(String(cur.desde||"").slice(0,10))}<div class="nota">desde el ${cdFecha(cur.fecha_inicio||cur.desde||"")}</div></td>
+        <td class="num">~${tTon(ref)}</td><td class="num">${tTon(a.kg)}</td>
+        <td>${pct.toFixed(0)}%<div class="cp-avance"><i class="${cerca ? "lleno" : ""}" style="width:${pct}%"></i></div></td>
+        <td class="wrap">${sigD}</td><td></td></tr>`);
+      return;
+    }
     const pct = tope ? Math.min(100, a.kg/tope*100) : 0, lleno = tope && a.kg > tope;
     const inicio = cur.desde_boleto != null
       ? `boleto <b>${nBoleto(cur.desde_boleto)}</b>${cur.auto ? '<div class="nota">abierta por el agente</div>' : ""}`
@@ -1227,6 +1261,9 @@ function pintarCampanas(){
   });
   $("#cpVig").innerHTML = filas.join("") || `<tr><td colspan="8" class="wrap">Ninguna procedencia tiene campaña todavía.</td></tr>`;
   $$("#cpVig [data-ed]").forEach(b => b.addEventListener("click", () => { CP.edit = CP.edit===b.dataset.ed ? null : b.dataset.ed; pintarCampanas(); }));
+  $$("#cpVig [data-cerrar]").forEach(b => b.addEventListener("click", () => cerrarHoy(b.dataset.cerrar)));
+  $$("#cpVig [data-cancelar]").forEach(b => b.addEventListener("click", () => cancelarCierre(b.dataset.cancelar)));
+  marcarAvisoTab();
   if(CP.edit){
     $("#eCancelar").addEventListener("click", () => { CP.edit = null; pintarCampanas(); });
     $("#eGuardar").addEventListener("click", guardarEdicion);
@@ -1376,6 +1413,151 @@ async function hiGuardar(){
        $("#hiGuardar").disabled=true; HI=null; await cargarCampanas(); CAMP_DET=CP.datos; }
   catch(e){ m.textContent=e.message; m.className="nota bad"; }
 }
+
+/* ===================================================================
+   V19.9 · CORTES POR DIA (criterio del introductor desde oct-26)
+   Cada campaña son dias completos y arranca con el primer camion del dia
+   indicado. Se guarda como boleto de arranque (o como momento 00:00 si ese
+   dia aun no tiene camiones). tope_kg queda vacio: el agente no la cierra
+   sola; tope_ref_kg es solo para el aviso. Todo con historial y recalculo.
+   =================================================================== */
+const MESN = {ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,set:9,oct:10,nov:11,dic:12};
+function diaAntes(f){ const d=new Date(String(f).slice(0,10)+"T12:00:00"); d.setDate(d.getDate()-1); return isoDe(d); }
+function diaDespues(f){ const d=new Date(String(f).slice(0,10)+"T12:00:00"); d.setDate(d.getDate()+1); return isoDe(d); }
+function leerDia(t){
+  t=String(t||"").trim().toLowerCase(); let m;
+  if((m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return isoDe(new Date(+m[1],+m[2]-1,+m[3]));
+  if((m=t.match(/^(\d{1,2})[\/\-\s]+([a-zé]{3})[a-zé]*[\/\-\s]+(\d{2,4})$/)) && MESN[m[2]]) return isoDe(new Date((m[3].length===2?2000:0)+ +m[3], MESN[m[2]]-1, +m[1]));
+  if((m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/))) return isoDe(new Date((m[3].length===2?2000:0)+ +m[3], +m[2]-1, +m[1]));
+  return null;
+}
+async function boletosPlanta(gk, desde){
+  const ex=new Set(Object.keys((CP.datos[gk]||{}).excluidos||{}).map(Number)), vistos=new Set(), regs=[];
+  let c=new Date(desde+"T12:00:00"); const fin=new Date(); fin.setHours(12,0,0,0);
+  while(c<=fin){
+    const t=new Date(c); t.setDate(t.getDate()+60); const h=t<fin?t:fin;
+    const pack=await traer("/boletos","orderBy="+encodeURIComponent('"$key"')+"&startAt="+encodeURIComponent('"'+isoDe(c)+'"')+"&endAt="+encodeURIComponent('"'+isoDe(h)+'"'));
+    if(pack===null) throw new Error("no se pudieron leer los boletos");
+    Object.keys(pack||{}).forEach(dia=>Object.values(pack[dia]||{}).forEach(r=>{
+      if(!r) return; const b=Number(r.boleto);
+      if(!Number.isInteger(b) || vistos.has(b) || ex.has(b)) return;
+      if(claveFb(r.grupo)!==gk || !productoEsPlanta(r.producto, r.grupo)) return;
+      vistos.add(b); regs.push(Object.assign({__b:b, __f:String(r.entrada||dia).slice(0,10)}, r));
+    }));
+    c=new Date(h); c.setDate(c.getDate()+1);
+  }
+  return regs.sort((a,b)=>a.__b-b.__b);
+}
+async function fechaDeLote(l){
+  if(!l) return null;
+  if(l.fecha_inicio) return l.fecha_inicio;
+  if(l.desde) return String(l.desde).slice(0,10);
+  if(l.desde_boleto){ const b=await buscarBoleto(l.desde_boleto); if(b) return b.fecha; }
+  return null;
+}
+let RD=null;
+function rdLlenar(){
+  const s=$("#rdProc"), a=s.value;
+  const gs=Object.keys(CP.datos).filter(k=>!k.startsWith("_") && lotesDe(CP.datos[k]).length).sort((x,y)=>nombreDe(x).localeCompare(nombreDe(y)));
+  s.innerHTML=gs.map(g=>`<option value="${esc(g)}"${g===a?" selected":""}>${esc(nombreDe(g))}</option>`).join("") || '<option value="">Sin campañas</option>';
+}
+function rdReset(){ RD=null; $("#rdAplicar").disabled=true; }
+async function rdCalcular(){
+  rdReset(); const m=$("#rdMsg"), pv=$("#rdPrev"); pv.innerHTML="";
+  const gk=$("#rdProc").value, n0=parseInt($("#rdNum").value,10), ref=parseFloat($("#rdRef").value), mot=($("#rdMot").value||"").trim();
+  const err=[], lista=[];
+  ($("#rdLista").value||"").split(/\n/).map(x=>x.trim()).filter(Boolean).forEach((l,i)=>{
+    const p=l.split(/[,;\t]/).map(x=>x.trim()), n=parseInt(p[0],10), f=leerDia(p[1]);
+    if(!n || !f) err.push("Renglón "+(i+1)+" no se entiende: "+l); else lista.push({n,f});
+  });
+  lista.sort((a,b)=>a.n-b.n);
+  if(!gk) err.push("Elige la procedencia.");
+  if(!n0) err.push("Escribe desde qué campaña aplica.");
+  if(!lista.length) err.push("Escribe al menos una campaña con su día.");
+  if(!(ref>0)) err.push("Escribe el tope de referencia.");
+  if(!mot) err.push("Falta el motivo.");
+  if(lista.length && lista[0].n!==n0) err.push("La primera campaña de la lista debe ser la "+n0+".");
+  for(let i=1;i<lista.length;i++){
+    if(lista[i].n!==lista[i-1].n+1) err.push("Los números deben ir seguidos ("+lista[i-1].n+" → "+lista[i].n+").");
+    if(lista[i].f<=lista[i-1].f) err.push("El día de la "+lista[i].n+" debe ser posterior al de la "+lista[i-1].n+".");
+  }
+  if(lista.length && lista[lista.length-1].f>diaDespues(hoyISO())) err.push("El último arranque no puede ser después de mañana.");
+  if(err.length){ m.innerHTML=err.map(esc).join("<br>"); m.className="nota bad"; return; }
+  m.textContent="Leyendo los camiones…"; m.className="nota";
+  let regs;
+  try{ regs=await boletosPlanta(gk, lista[0].f); }
+  catch(e){ m.textContent="No se pudieron leer los camiones. Intenta otra vez."; m.className="nota bad"; return; }
+  const camp=lista.map((o,i)=>{
+    const fin=lista[i+1]?lista[i+1].f:null;
+    const suyos=regs.filter(r=>r.__f>=o.f && (!fin || r.__f<fin));
+    return {n:o.n, f:o.f, b: suyos.length?suyos[0].__b:null, viajes:suyos.length, kg:suyos.reduce((a,r)=>a+(Number(r.neto)||0),0),
+            f2: suyos.length?suyos[suyos.length-1].__f:null, ultima:!fin};
+  });
+  /* un arranque sin camiones solo se permite en la ultima (queda por momento 00:00) */
+  const vacias=camp.filter(o=>!o.b && !o.ultima);
+  if(vacias.length){ m.innerHTML="Estas campañas no tendrían camiones: "+vacias.map(o=>o.n).join(", ")+". Revisa los días."; m.className="nota bad"; return; }
+  const viejas=lotesDe(CP.datos[gk]).filter(l=>l.numero>=n0).sort((a,b)=>a.numero-b.numero);
+  let masViejo=lista[0].f;
+  const fv=await fechaDeLote(viejas[0]); if(fv && fv<masViejo) masViejo=fv;
+  RD={gk, n0, ref:Math.round(ref*1000), mot, camp, viejas, masViejo};
+  pv.innerHTML=`<div class="tabla-caja" style="margin-top:10px"><table><thead><tr><th class="num">Campaña</th><th>Del</th><th>Al</th><th class="num">Primer boleto</th>
+      <th class="num">Camiones</th><th class="num">Toneladas</th><th>Estado</th></tr></thead><tbody>`
+    + camp.map(o=>`<tr><td class="num"><b>${o.n}</b></td><td>${cdFecha(o.f)}</td><td>${o.ultima?"en curso":cdFecha(diaAntes(camp[camp.indexOf(o)+1].f))}</td>
+        <td class="num">${o.b||"— (aún sin camiones)"}</td><td class="num">${o.viajes}</td><td class="num"><b>${tTon(o.kg)}</b></td>
+        <td>${o.ultima?'<span class="tag camp">En curso</span>':'<span class="tag otro">Cerrada</span>'}</td></tr>`).join("")
+    + `</tbody></table></div><div class="nota" style="margin-top:8px">Se reemplazan: ${viejas.length?viejas.map(l=>"campaña "+l.numero).join(", "):"ninguna"}.
+       El agente recalculará desde el ${cdFecha(masViejo)} en su siguiente corrida (la PC de báscula debe estar encendida).</div>`;
+  m.innerHTML="Vista previa lista. Compárala con lo que manda el introductor y, si cuadra, presiona <b>Aplicar cortes</b>.";
+  m.className="nota ok"; $("#rdAplicar").disabled=false;
+}
+async function rdAplicar(){
+  if(!RD) return; const m=$("#rdMsg"), cuando=ahoraISO(), cambios={}, base=`campanas/${RD.gk}`;
+  if(!confirm(`¿Aplicar los cortes de ${nombreDe(RD.gk)}?\n\nQuedan las campañas ${RD.camp[0].n} a ${RD.camp[RD.camp.length-1].n}. Se reemplazan ${RD.viejas.length}.`)) return;
+  RD.viejas.forEach(l=>{ cambios[`${base}/lotes/${l.numero}`]=null; });
+  RD.camp.forEach(o=>{ cambios[`${base}/lotes/${o.n}`]=Object.assign({numero:o.n, tope_kg:null, tope_ref_kg:RD.ref, regla:"dias", fecha_inicio:o.f,
+      firma:{quien:AUTH.email, cuando}}, o.b ? {desde_boleto:o.b} : {desde:o.f+"T00:00:00"}); });
+  cambios[`${base}/historial/${idHist()}`]={cuando, quien:AUTH.email, motivo:RD.mot,
+    que:`cortes por día desde la campaña ${RD.n0}: ${RD.camp.map(o=>o.n+" desde "+o.f+(o.b?" (boleto "+o.b+")":"")).join(", ")}; referencia ${tTon(RD.ref)} t`,
+    antes:RD.viejas.map(l=>({numero:l.numero, desde_boleto:l.desde_boleto??null, desde:l.desde??null, tope_kg:l.tope_kg??null, auto:!!l.auto}))};
+  cambios["campanas/_recalcular"]={id:String(Date.now()), dias:diasDesde(RD.masViejo)};
+  try{ await fb("PATCH","/",cambios);
+       m.innerHTML="Guardado. El agente recalcula desde el "+cdFecha(RD.masViejo)+" en su siguiente corrida; puede tardar varios minutos. Después revisa <b>Campañas detalle</b>.";
+       m.className="nota ok"; rdReset(); await cargarCampanas(); CAMP_DET=CP.datos; }
+  catch(e){ m.textContent=e.message; m.className="nota bad"; }
+}
+/* Cerrar al terminar hoy: programa la siguiente para mañana 00:00 (no se necesita recalcular) */
+async function cerrarHoy(gk){
+  const ls=lotesDe(CP.datos[gk]), cur=ls[0]; if(!cur) return;
+  const man=diaDespues(hoyISO()), n=cur.numero+1;
+  const mot=prompt(`Cerrar la campaña ${cur.numero} de ${nombreDe(gk)} al terminar hoy.\nLa ${n} arrancará con el primer camión del ${cdFecha(man)}.\n\nMotivo (obligatorio):`);
+  if(!mot || !mot.trim()) return;
+  const cuando=ahoraISO(), cambios={};
+  cambios[`campanas/${gk}/lotes/${n}`]={numero:n, desde:man+"T00:00:00", tope_kg:null, tope_ref_kg:cur.tope_ref_kg||null, regla:"dias", fecha_inicio:man, firma:{quien:AUTH.email, cuando}};
+  cambios[`campanas/${gk}/historial/${idHist()}`]={cuando, quien:AUTH.email, motivo:mot.trim(), que:`cierra la campaña ${cur.numero} al terminar el ${hoyISO()}; la ${n} arranca el ${man}`};
+  try{ await fb("PATCH","/",cambios); await cargarCampanas(); CAMP_DET=CP.datos; }catch(e){ alert(e.message); }
+}
+async function cancelarCierre(gk){
+  const ls=lotesDe(CP.datos[gk]), p=ls[0];
+  if(!p || p.desde_boleto || !p.desde || String(p.desde).slice(0,10)<=hoyISO()) return;
+  if(!confirm(`¿Cancelar el cierre? La campaña ${ls[1].numero} sigue en curso.`)) return;
+  const cuando=ahoraISO(), cambios={};
+  cambios[`campanas/${gk}/lotes/${p.numero}`]=null;
+  cambios[`campanas/${gk}/historial/${idHist()}`]={cuando, quien:AUTH.email, motivo:"cancelado", que:`cancela el cierre programado; se quita la campaña ${p.numero} (arrancaba el ${String(p.desde).slice(0,10)})`};
+  try{ await fb("PATCH","/",cambios); await cargarCampanas(); CAMP_DET=CP.datos; }catch(e){ alert(e.message); }
+}
+/* Aviso en la pestaña cuando una campaña por dias llega al 90% de su referencia */
+function marcarAvisoTab(){
+  let hay=false;
+  Object.keys(CP.datos).filter(k=>!k.startsWith("_")).forEach(gk=>{
+    const ls=lotesDe(CP.datos[gk]), cur=ls[0];
+    if(cur && !cur.tope_kg && cur.tope_ref_kg && !(cur.desde && !cur.desde_boleto && String(cur.desde).slice(0,10)>hoyISO())
+       && acumLote(gk,cur.numero).kg>=cur.tope_ref_kg*0.9) hay=true;
+  });
+  $$('.tab[data-t="campanas"]').forEach(b=>{ b.textContent = hay ? "Campañas ⚠" : "Campañas"; });
+}
+["rdProc","rdNum","rdRef","rdLista"].forEach(id=>$("#"+id).addEventListener("input",()=>{ rdReset(); $("#rdPrev").innerHTML=""; }));
+$("#rdCalc").addEventListener("click",rdCalcular);
+$("#rdAplicar").addEventListener("click",rdAplicar);
 $("#hiRevisar").addEventListener("click",hiRevisar);
 $("#hiGuardar").addEventListener("click",hiGuardar);
 $("#hiProc").addEventListener("change",()=>{ HI=null; $("#hiGuardar").disabled=true; hiPintarExcl(); });
