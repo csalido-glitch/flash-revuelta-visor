@@ -926,7 +926,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.9 · 14-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.10 · 16-oct-2026)</span>
   </p>
 </div>
 
@@ -2770,8 +2770,21 @@ function llenarSelects(){
     s.innerHTML='<option value="">'+s.options[0].text+'</option>'+
       vals.map(v=>`<option${v===a?" selected":""}>${esc(v)}</option>`).join(""); };
   const u=k=>[...new Set(S.detalle.map(r=>r[k]).filter(Boolean))].sort();
-  set("#fProc",u("procedencia")); set("#fProd",u("producto")); set("#fClase",u("clase"));
+  set("#fProd",u("producto")); set("#fClase",u("clase"));
+  /* V19.10: procedencia con grupos "todos los Realito" y "todas las Vinatita" arriba */
+  const s=$("#fProc"), a=s.value, ps=u("procedencia");
+  const grupos=GRUPOS_PROC.filter(g=>ps.filter(v=>g.re.test(normProc(v))).length>0);
+  s.innerHTML='<option value="">Todas</option>'
+    +(grupos.length?'<optgroup label="Juntas">'+grupos.map(g=>`<option value="G:${g.k}"${a==="G:"+g.k?" selected":""}>${esc(g.t)}</option>`).join("")+'</optgroup>':'')
+    +'<optgroup label="Una por una">'+ps.map(v=>`<option${v===a?" selected":""}>${esc(v)}</option>`).join("")+'</optgroup>';
   llenarCampanas();
+}
+const GRUPOS_PROC=[{k:"REALITO",t:"EL REALITO (todos)",re:/^realito|^el realito/},{k:"VINATITA",t:"VINATITA (todas)",re:/vinatita/}];
+const normProc=v=>String(v||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase();
+function procCoincide(r,p){
+  if(!p) return true;
+  if(p.startsWith("G:")){ const g=GRUPOS_PROC.find(x=>"G:"+x.k===p); return !!g && g.re.test(normProc(r.procedencia)); }
+  return r.procedencia===p;
 }
 
 /* V19.2 · Filtro por campana. Las opciones salen de lo que el gestor dio de
@@ -2788,7 +2801,7 @@ function llenarCampanas(){
   Object.entries(CAMP_DET||{}).forEach(([gk,c])=>{
     if(!c || typeof c!=="object" || gk.startsWith("_")) return;
     const nom=c.procedencia||gk;
-    if(p && claveFb(p)!==gk && !S.detalle.some(r=>r.procedencia===p && claveFb(r.grupo)===gk)) return;
+    if(p && claveFb(p)!==gk && !S.detalle.some(r=>procCoincide(r,p) && claveFb(r.grupo)===gk)) return;
     lotesDe(c).forEach(l=>ops.push({v:gk+"|"+l.numero, t:(p?"":nom+" · ")+"Campaña "+l.numero, gk, n:l.numero}));
   });
   ops.sort((x,y)=> x.gk===y.gk ? y.n-x.n : x.gk.localeCompare(y.gk));
@@ -2825,7 +2838,7 @@ function filtradas(lista){
   return (lista||S.detalle).filter(r=>{
     if(cp==="-" && r.lote!=null) return false;
     if(cgk && (claveFb(r.grupo)!==cgk || Number(r.lote)!==Number(cn))) return false;
-    if(p && r.procedencia!==p) return false;
+    if(p && !procCoincide(r,p)) return false;
     if(pr && r.producto!==pr) return false;
     if(cl && r.clase!==cl) return false;
     if(t){ const s=[r.boleto,r.placas,r.chofer].join(" ").toLowerCase(); if(!s.includes(t)) return false; }
