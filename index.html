@@ -603,7 +603,7 @@ body.con-login{overflow:hidden}
 .al-chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 .al-card{border:1px solid var(--border);border-left:4px solid var(--critical);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--surface)}
 .al-card.t-peso{border-left-color:var(--warning)}.al-card.t-procedencia{border-left-color:var(--s7)}
-.al-card.t-falta_bascula{border-left-color:var(--s1)}.al-card.t-incompleto{border-left-color:var(--muted)}.al-card.t-neto{border-left-color:var(--s2)}
+.al-card.t-falta_bascula{border-left-color:var(--s1)}.al-card.t-incompleto{border-left-color:var(--muted)}.al-card.t-neto{border-left-color:var(--s2)}.al-card.t-duplicado{border-left-color:var(--critical)}
 .al-card.rev{opacity:.6}
 .al-h{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .al-tipo{font-weight:800}.al-donde{color:var(--ink-2);font-size:12.5px}
@@ -983,7 +983,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.11 · 16-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.12 · 16-oct-2026)</span>
   </p>
 </div>
 
@@ -3219,6 +3219,7 @@ async function cargar(){
    =================================================================== */
 const AL = { datos:null, rev:{}, f:"todas", revisado:null };
 const AL_TIPOS = {
+  duplicado:     "Posible duplicado en báscula",
   falta_excel:   "En báscula, no en Excel",
   procedencia:   "Procedencia distinta",
   peso:          "Peso distinto",
@@ -3318,9 +3319,13 @@ function pintarAlertas(){
 function alTarjeta(k, a){
   const x = a.excel, b = a.bascula, dif = new Set(a.dif||[]);
   const m = (campo, txt) => dif.has(campo) ? `<span class="al-dif">${txt}</span>` : txt;
-  const fila = x ? `<span class="al-fila">Excel ${esc(sinXlsx(x.archivo))} · fila ${x.fila}</span>` : `<span class="al-fila sin">Sin fila: no está en el Excel</span>`;
+  const fila = a.tipo==="duplicado" ? `<span class="al-fila sin">Báscula</span>` : x ? `<span class="al-fila">Excel ${esc(sinXlsx(x.archivo))} · fila ${x.fila}</span>` : `<span class="al-fila sin">Sin fila: no está en el Excel</span>`;
   const donde = alFecha(a.fecha) + (a.boleto ? " · boleto "+a.boleto : "");
-  const izq = x
+  const o = a.otro;
+  const izqT = o ? "Báscula · el otro boleto" : "Excel";
+  const izq = o
+    ? `Boleto <b>${o.boleto}</b> · ${esc(o.chofer||"—")}${o.placas?" · "+esc(o.placas):""}<br>${esc(o.procedencia||o.grupo||"—")}<br>${alFecha(o.fecha)}${alHora(o.entrada)} · ${kgF(o.bruto)} − ${kgF(o.tara)} = ${kgF(o.neto)} kg`
+    : x
     ? `${esc(x.chofer||"—")}${x.camion?" · camión "+esc(x.camion):""}${x.lote?" · "+esc(x.lote):""}<br>${alFecha(x.fecha)} · ${m("bruto",kgF(x.bruto))} − ${m("tara",kgF(x.tara))} = ${kgF(x.neto)} kg`
       + (x.neto_excel!=null ? `<br>El Excel dice neto <span class="al-dif">${kgF(x.neto_excel)}</span>` : "")
     : "No aparece en el Excel";
@@ -3334,7 +3339,7 @@ function alTarjeta(k, a){
       + (b ? `<button class="btn" data-ver="${b.boleto}" data-fecha="${esc(b.fecha||a.fecha)}">Ver boleto en Detalle</button>` : "");
   return `<div class="al-card t-${esc(a.tipo)}${r?" rev":""}">
     <div class="al-h"><span class="al-tipo">${esc(AL_TIPOS[a.tipo]||a.tipo)}</span>${fila}<span class="al-donde">${donde} · ${esc(a.familia||"")}</span></div>
-    <div class="al-cmp"><div class="al-lado"><b class="t">Excel</b>${izq}</div><div class="al-lado"><b class="t">Báscula</b>${der}</div></div>
+    <div class="al-cmp"><div class="al-lado"><b class="t">${izqT}</b>${izq}</div><div class="al-lado"><b class="t">Báscula${o?" · posible duplicado":""}</b>${der}</div></div>
     ${a.pista ? `<div class="al-pista">💡 ${esc(a.pista)}</div>` : ""}
     <div class="al-acc">${acc}</div></div>`;
 }
