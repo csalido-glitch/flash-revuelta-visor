@@ -441,6 +441,16 @@ nav.tabs { display:flex; gap:2px; flex-wrap:wrap; }
 .campo { display:flex; flex-direction:column; gap:5px; }
 .campo label { font-size:11px; font-weight:600; color:var(--muted);
                text-transform:uppercase; letter-spacing:.05em; }
+.multi{position:relative}
+.multi-btn{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 30px 7px 10px;min-width:180px;max-width:280px;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
+.multi-btn::after{content:"▾";position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.multi-pan{position:absolute;z-index:40;top:calc(100% + 4px);left:0;min-width:260px;max-height:340px;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:8px}
+.multi-pan .mp-t{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin:6px 4px 2px}
+.campo .multi-pan label{text-transform:none;letter-spacing:normal;color:var(--ink);font-weight:400;margin:0;justify-content:flex-start;display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:14px;white-space:nowrap}
+.multi-pan label:hover{background:color-mix(in srgb,var(--gold) 12%,transparent)}
+.campo .multi-pan input{accent-color:var(--gold-dark);width:15px;height:15px;margin:0;min-width:0;padding:0;flex:none}
+.multi-pan .mp-acc{display:flex;gap:8px;border-bottom:1px solid var(--border);padding:2px 4px 8px;margin-bottom:4px}
+.multi-pan .mp-acc button{font:inherit;font-size:12.5px;background:none;border:none;color:var(--s1);cursor:pointer;padding:2px 4px}
 .campo input, .campo select, .campo textarea {
   font:inherit; font-size:14px; color:var(--ink); background:var(--surface);
   border:1px solid var(--border); border-radius:8px; padding:7px 10px; min-width:130px;
@@ -800,7 +810,7 @@ details summary{cursor:pointer}
         <div class="campo"><label for="fHastaBtn">Hasta</label>
           <div class="fecha"><button type="button" class="fbtn" id="fHastaBtn">—</button>
           <input type="date" id="fHasta" tabindex="-1" aria-hidden="true"></div></div>
-        <div class="campo"><label for="fProc">Procedencia</label><select id="fProc"><option value="">Todas</option></select></div>
+        <div class="campo"><label>Procedencia</label><div class="multi" id="fProc"><button type="button" class="multi-btn" id="fProcBtn">Todas</button><div class="multi-pan oculto" id="fProcPan"></div></div></div>
         <div class="campo"><label for="fProd">Producto</label><select id="fProd"><option value="">Todos</option></select></div>
         <div class="campo"><label for="fClase">Clase</label><select id="fClase"><option value="">Todas</option></select></div>
         <div class="campo"><label for="fCamp">Campaña</label><select id="fCamp"><option value="">Todas</option></select></div>
@@ -2772,15 +2782,40 @@ function llenarSelects(){
   const u=k=>[...new Set(S.detalle.map(r=>r[k]).filter(Boolean))].sort();
   set("#fProd",u("producto")); set("#fClase",u("clase"));
   /* V19.10: procedencia con grupos "todos los Realito" y "todas las Vinatita" arriba */
-  const s=$("#fProc"), a=s.value, ps=u("procedencia");
-  const grupos=GRUPOS_PROC.filter(g=>ps.filter(v=>g.re.test(normProc(v))).length>0);
-  s.innerHTML='<option value="">Todas</option>'
-    +(grupos.length?'<optgroup label="Juntas">'+grupos.map(g=>`<option value="G:${g.k}"${a==="G:"+g.k?" selected":""}>${esc(g.t)}</option>`).join("")+'</optgroup>':'')
-    +'<optgroup label="Una por una">'+ps.map(v=>`<option${v===a?" selected":""}>${esc(v)}</option>`).join("")+'</optgroup>';
+  pintarProcMulti(u("procedencia"));
   llenarCampanas();
 }
 const GRUPOS_PROC=[{k:"REALITO",t:"EL REALITO (todos)",re:/^realito|^el realito/},{k:"VINATITA",t:"VINATITA (todas)",re:/vinatita/}];
 const normProc=v=>String(v||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase();
+/* V19.10: seleccion multiple de procedencias (y grupos). Vacio = todas. */
+const PSEL=new Set();
+function pintarProcMulti(ps){
+  const grupos=GRUPOS_PROC.filter(g=>ps.some(v=>g.re.test(normProc(v))));
+  [...PSEL].forEach(v=>{ if(!v.startsWith("G:") && !ps.includes(v)) PSEL.delete(v); });
+  const caja=(v,t)=>`<label><input type="checkbox" value="${esc(v)}"${PSEL.has(v)?" checked":""}> ${esc(t)}</label>`;
+  $("#fProcPan").innerHTML=`<div class="mp-acc"><button type="button" data-a="ninguna">Todas (quitar selección)</button></div>`
+    +(grupos.length?'<div class="mp-t">Juntas</div>'+grupos.map(g=>caja("G:"+g.k,g.t)).join(""):"")
+    +'<div class="mp-t">Una por una</div>'+ps.map(v=>caja(v,v)).join("");
+  procBtnTxt();
+}
+function procBtnTxt(){
+  const v=[...PSEL], nom=x=>{ const g=GRUPOS_PROC.find(y=>"G:"+y.k===x); return g?g.t:x; };
+  const b=$("#fProcBtn"); b.textContent = !v.length ? "Todas" : v.length===1 ? nom(v[0]) : v.length+" seleccionadas";
+  b.title = v.map(nom).join(" + ");
+}
+function procSelCoincide(r){ return !PSEL.size || [...PSEL].some(p=>procCoincide(r,p)); }
+$("#fProcBtn").addEventListener("click",e=>{ e.stopPropagation(); $("#fProcPan").classList.toggle("oculto"); });
+$("#fProcPan").addEventListener("click",e=>{
+  e.stopPropagation();
+  const a=e.target.dataset && e.target.dataset.a;
+  if(a){ PSEL.clear(); if(a==="todas"){} $$("#fProcPan input").forEach(i=>i.checked=false); procBtnTxt(); $("#fProc").dispatchEvent(new Event("change")); }
+});
+$("#fProcPan").addEventListener("change",e=>{
+  const i=e.target; if(i.type!=="checkbox") return;
+  if(i.checked) PSEL.add(i.value); else PSEL.delete(i.value);
+  procBtnTxt(); $("#fProc").dispatchEvent(new Event("change"));
+});
+document.addEventListener("click",()=>{ const p=$("#fProcPan"); if(p) p.classList.add("oculto"); });
 function procCoincide(r,p){
   if(!p) return true;
   if(p.startsWith("G:")){ const g=GRUPOS_PROC.find(x=>"G:"+x.k===p); return !!g && g.re.test(normProc(r.procedencia)); }
@@ -2797,12 +2832,12 @@ async function campanasDet(){
   return CAMP_DET;
 }
 function llenarCampanas(){
-  const s=$("#fCamp"), a=s.value, p=$("#fProc").value, ops=[];
+  const s=$("#fCamp"), a=s.value, p=PSEL.size, ops=[];
   Object.entries(CAMP_DET||{}).forEach(([gk,c])=>{
     if(!c || typeof c!=="object" || gk.startsWith("_")) return;
     const nom=c.procedencia||gk;
-    if(p && claveFb(p)!==gk && !S.detalle.some(r=>procCoincide(r,p) && claveFb(r.grupo)===gk)) return;
-    lotesDe(c).forEach(l=>ops.push({v:gk+"|"+l.numero, t:(p?"":nom+" · ")+"Campaña "+l.numero, gk, n:l.numero}));
+    if(p && ![...PSEL].some(x=>claveFb(x)===gk) && !S.detalle.some(r=>procSelCoincide(r) && claveFb(r.grupo)===gk)) return;
+    lotesDe(c).forEach(l=>ops.push({v:gk+"|"+l.numero, t:(p===1?"":nom+" · ")+"Campaña "+l.numero, gk, n:l.numero}));
   });
   ops.sort((x,y)=> x.gk===y.gk ? y.n-x.n : x.gk.localeCompare(y.gk));
   s.innerHTML='<option value="">Todas</option><option value="-">Sin campaña</option>'+
@@ -2832,13 +2867,13 @@ async function campanaElegida(){
 }
 
 function filtradas(lista){
-  const p=$("#fProc").value, pr=$("#fProd").value, cl=$("#fClase").value, cp=$("#fCamp").value;
+  const pr=$("#fProd").value, cl=$("#fClase").value, cp=$("#fCamp").value;
   const t=($("#fTexto").value||"").trim().toLowerCase();
   const [cgk,cn]=(cp && cp!=="-") ? cp.split("|") : [null,null];
   return (lista||S.detalle).filter(r=>{
     if(cp==="-" && r.lote!=null) return false;
     if(cgk && (claveFb(r.grupo)!==cgk || Number(r.lote)!==Number(cn))) return false;
-    if(p && !procCoincide(r,p)) return false;
+    if(!procSelCoincide(r)) return false;
     if(pr && r.producto!==pr) return false;
     if(cl && r.clase!==cl) return false;
     if(t){ const s=[r.boleto,r.placas,r.chofer].join(" ").toLowerCase(); if(!s.includes(t)) return false; }
@@ -3025,7 +3060,7 @@ const sincroHasta = montarFecha("fHasta","fHastaBtn");
 function sincroFechas(){ sincroDesde&&sincroDesde(); sincroHasta&&sincroHasta(); }
 
 $("#bLimpiar").addEventListener("click",()=>{
-  $("#fProc").value=""; $("#fProd").value=""; $("#fClase").value=""; $("#fCamp").value=""; $("#fTexto").value="";
+  PSEL.clear(); procBtnTxt(); $("#fProd").value=""; $("#fClase").value=""; $("#fCamp").value=""; $("#fTexto").value="";
   $("#fDesde").value=S.fecha; $("#fHasta").value=S.fecha; sincroFechas(); cargarDetalle();
 });
 function alertaPie(m){ $("#pieN").textContent="No se pudo bajar el CSV: "+m; }
