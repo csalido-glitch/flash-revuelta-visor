@@ -1,5 +1,5 @@
 {
-  "_nota": "V4.3: viajes de 2025 capturados en Excel (antes del 11-nov-25 y huecos 11, 17 y 18-nov-25). Se cargan UNA vez por id de 'excel'. La carga de bascula 2025 ya hecha conserva su id y no se repite.",
+  "_nota": "V4.4: alertas (cuadre de bascula contra los Excel de fletes de Dropbox, solo lectura). La carga 2025 ya hecha conserva su id y no se repite.",
   "id": "carga-2025-completa-b",
   "carga_desde": "2025-01-01",
   "config": {
@@ -7,7 +7,10 @@
     "equipo_esperado": "TI-00023",
     "solo_tarea": true,
     "estado_cada_min": 15,
-    "campanas": true
+    "campanas": true,
+    "cuadre": true,
+    "cuadre_desde": "2026-09-01",
+    "cuadre_cada_min": 15
   },
   "excel": {
     "id": "2025-a",
@@ -15,7 +18,7 @@
     "sha256": "42e68f5149ec0128623d351ff75720cb43e6c37ecab99dbbea9ef52a8785a585"
   },
   "actualizar": {
-    "sha256": "7ef904507f7877ad5bc3a3cfc2d5d6fee3968976658962886e58b6b04671dc71",
+    "sha256": "6c2092ceacbe9da9f6523f87026f35b683d786312f128ddb84c760bd21c22e2f",
     "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }

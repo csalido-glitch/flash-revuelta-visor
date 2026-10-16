@@ -47,6 +47,13 @@ V4.3 - Viajes de 2025 capturados a mano en Excel
   boleto real) y origen_dato = "excel". Bascula manda: el archivo solo trae
   dias sin bascula o viajes que bascula no tiene. Si el archivo falta o no
   cuadra su huella, el agente trabaja exactamente como la V4.2.
+
+V4.4 - Alertas: bascula contra los Excel de fletes
+  Lee en SOLO LECTURA los Excel de fletes de la carpeta compartida
+  21.-Bascula\2026 (junto a Flash_Acarreo_Data) y los compara contra los
+  boletos ya enviados a Firebase. Sube solo el resultado a /alertas. Corre
+  cuando cambia algun Excel o cada 15 min. Nunca escribe en un Excel. Si
+  algo falla, el agente trabaja exactamente como la V4.3.
 """
 
 import hashlib
@@ -62,7 +69,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.3"
+VERSION = "4.4"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -1431,6 +1438,694 @@ def preparar_excel(orden):
     return None
 
 
+# ==========================================================================
+# V4.4 - ALERTAS: cuadre de bascula contra los Excel de fletes
+# ==========================================================================
+#
+# Lee (SOLO LECTURA) los Excel de fletes que estan en la carpeta compartida
+# de Dropbox, junto a Flash_Acarreo_Data:  21.-Bascula\2026\...\*.xlsx
+# y los compara contra los boletos que ya estan en Firebase. Sube solo el
+# resultado a /alertas. Nunca escribe, mueve ni bloquea un Excel: los abre
+# como zip de lectura y en cuanto termina los suelta.
+#
+# Reglas (pura logica, siempre dan lo mismo con los mismos datos):
+#   cuadra             mismo bruto y tara, fecha +-2 dias
+#   peso distinto      mismo dia +-1, bruto o tara igual y el otro difiere
+#                      poco (hasta 300 kg)
+#   procedencia dist.  cuadra el peso, pero bascula lo registro en otra
+#                      procedencia que la del Excel
+#   en Excel, no en b. fila del Excel sin boleto
+#   en bascula, no en  boleto de una procedencia que lleva Excel, dentro
+#   Excel              de las fechas que ese Excel ya cubre, sin fila
+#   boleto incompleto  tara 0 o neto 0 en bascula
+#   neto mal calculado neto del Excel distinto de bruto - tara
+#
+# Todo va envuelto: si algo falla, el agente sigue igual que la V4.3.
+
+import zipfile
+import xml.etree.ElementTree as ET
+
+ARCHIVO_CUADRE_CACHE = os.path.join(BASE, "cuadre_cache.json")
+CUADRE_TOL_KG = 300            # diferencia maxima para "peso distinto"
+CUADRE_DIAS = 2                # ventana de fechas para cuadrar
+CUADRE_MAX_ALERTAS = 300       # tope de alertas que se suben
+_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+_NSR = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+
+
+def _sin_acentos(s):
+    s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode()
+    return re.sub(r"\s+", " ", s).strip().upper()
+
+
+def _col_idx(ref):
+    """'AB12' -> 27 (base 0)."""
+    n = 0
+    for ch in ref:
+        if "A" <= ch <= "Z":
+            n = n * 26 + (ord(ch) - 64)
+        else:
+            break
+    return n - 1
+
+
+def _col_letra(i):
+    s = ""
+    i += 1
+    while i:
+        i, r = divmod(i - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def _xlsx_hojas(ruta):
+    """Devuelve [(nombre_hoja, filas)] donde filas = [(numero_fila, {col: valor})].
+    Solo libreria estandar. Lectura pura del zip."""
+    hojas = []
+    with zipfile.ZipFile(ruta) as z:
+        nombres = set(z.namelist())
+        compartidas = []
+        if "xl/sharedStrings.xml" in nombres:
+            with z.open("xl/sharedStrings.xml") as f:
+                for _, el in ET.iterparse(f):
+                    if el.tag == _NS + "si":
+                        compartidas.append("".join(t.text or "" for t in el.iter(_NS + "t")))
+                        el.clear()
+        rels = {}
+        if "xl/_rels/workbook.xml.rels" in nombres:
+            raiz = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
+            for r in raiz:
+                destino = r.get("Target") or ""
+                destino = destino.lstrip("/")
+                if not destino.startswith("xl/"):
+                    destino = "xl/" + destino
+                rels[r.get("Id")] = destino
+        libro = ET.fromstring(z.read("xl/workbook.xml"))
+        for h in libro.iter(_NS + "sheet"):
+            if (h.get("state") or "visible") != "visible":
+                continue
+            destino = rels.get(h.get(_NSR + "id"))
+            if not destino or destino not in nombres:
+                continue
+            filas = []
+            with z.open(destino) as f:
+                for _, el in ET.iterparse(f):
+                    if el.tag != _NS + "row":
+                        continue
+                    num = int(el.get("r") or (len(filas) + 1))
+                    celdas = {}
+                    for c in el.iter(_NS + "c"):
+                        t = c.get("t")
+                        v = c.find(_NS + "v")
+                        if t == "inlineStr":
+                            val = "".join(x.text or "" for x in c.iter(_NS + "t"))
+                        elif v is None or v.text is None:
+                            continue
+                        elif t == "s":
+                            try:
+                                val = compartidas[int(v.text)]
+                            except Exception:
+                                continue
+                        elif t in ("str", "e"):
+                            val = v.text
+                        elif t == "b":
+                            val = v.text == "1"
+                        else:
+                            try:
+                                val = float(v.text)
+                            except Exception:
+                                val = v.text
+                        if val in ("", None):
+                            continue
+                        celdas[_col_idx(c.get("r") or "A")] = val
+                    if celdas:
+                        filas.append((num, celdas))
+                    el.clear()
+            hojas.append((h.get("name") or "?", filas))
+    return hojas
+
+
+def _fecha_excel(v):
+    """Serial de Excel o texto -> 'aaaa-mm-dd' o None."""
+    if isinstance(v, float):
+        if 30000 < v < 80000:
+            return (datetime(1899, 12, 30) + timedelta(days=int(v))).strftime("%Y-%m-%d")
+        return None
+    s = str(v or "").strip()
+    m = re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if m:
+        a, me, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        m = re.match(r"(\d{1,2})[/\-\. ]([A-Za-z]{3,}|\d{1,2})[/\-\. ](\d{2,4})", s)
+        if not m:
+            return None
+        d = int(m.group(1))
+        me = m.group(2)
+        me = int(me) if me.isdigit() else MESES.get(_clave(me)[:3])
+        a = int(m.group(3))
+        a = a + 2000 if a < 100 else a
+    try:
+        return datetime(a, int(me), d).strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def _kg(v, en_ton=False):
+    n = a_numero(v) if not isinstance(v, bool) else None
+    if n is None:
+        return None
+    if 0 < n < 200:                    # toneladas -> kg (el encabezado no es confiable)
+        n = n * 1000
+    return int(round(n))
+
+
+def _encabezado(filas):
+    """Busca en las primeras 15 filas la que trae FECHA, BRUTO y TARA."""
+    for num, celdas in filas[:15]:
+        txt = {i: _sin_acentos(v) for i, v in celdas.items() if isinstance(v, str)}
+        if not any("FECHA" in t for t in txt.values()):
+            continue
+        if not any("BRUTO" in t for t in txt.values()) or not any("TARA" in t for t in txt.values()):
+            continue
+        col = {}
+        for i, t in sorted(txt.items()):
+            if "FECHA" in t and "fecha" not in col:
+                col["fecha"] = i
+            elif "BRUTO" in t and "bruto" not in col:
+                col["bruto"] = i
+                col["bruto_ton"] = "TON" in t
+            elif t.startswith("TARA") and "tara" not in col:
+                col["tara"] = i
+            elif "NETO" in t and "KG" in t and "neto" not in col:
+                col["neto"] = i
+            elif t == "TOTAL KG" and "neto" not in col:
+                col["neto"] = i
+            elif "CHOFER" in t and "chofer" not in col:
+                col["chofer"] = i
+            elif "CAMION" in t and "camion" not in col:
+                col["camion"] = i
+            elif "LOTE" in t and "lote" not in col:
+                col["lote"] = i
+            elif "PROCEDENCIA" in t and "procedencia" not in col:
+                col["procedencia"] = i
+            elif "CONTENIDO" in t and "contenido" not in col:
+                col["contenido"] = i
+            elif "FOLIO" in t and "folio" not in col:
+                col["folio"] = i
+        if "fecha" in col and "bruto" in col and "tara" in col:
+            return num, col
+    return None, None
+
+
+def leer_excel_fletes(ruta, desde, hasta):
+    """Filas utiles de un Excel de fletes entre dos fechas (aaaa-mm-dd)."""
+    salida = []
+    for hoja, filas in _xlsx_hojas(ruta):
+        num_h, col = _encabezado(filas)
+        if not col:
+            continue
+        for num, c in filas:
+            if num <= num_h:
+                continue
+            f = _fecha_excel(c.get(col["fecha"]))
+            if not f or f < desde or f > hasta:
+                continue
+            bruto = _kg(c.get(col["bruto"]), col.get("bruto_ton"))
+            tara = _kg(c.get(col["tara"]))
+            if not bruto or not tara:
+                continue
+            neto = _kg(c.get(col["neto"])) if "neto" in col else None
+            txt = lambda k: limpiar_texto(c.get(col[k])) if k in col and c.get(col[k]) is not None else None
+            lote = c.get(col["lote"]) if "lote" in col else None
+            if isinstance(lote, float):
+                lote = int(lote) if lote == int(lote) else lote
+            salida.append({
+                "hoja": hoja, "fila": num, "fecha": f, "bruto": bruto, "tara": tara,
+                "neto": neto, "chofer": txt("chofer"), "camion": txt("camion"),
+                "lote": lote, "procedencia": txt("procedencia"),
+                "c_bruto": _col_letra(col["bruto"]), "c_tara": _col_letra(col["tara"]),
+                "c_neto": _col_letra(col["neto"]) if "neto" in col else None,
+            })
+    return salida
+
+
+def _carpetas_excel(desde, hasta):
+    """Las carpetas de anio (2026, 2027...) junto a Flash_Acarreo_Data."""
+    puente = carpeta_puente()
+    if not puente:
+        return None, "no se encontro la carpeta Flash_Acarreo_Data"
+    raiz = os.path.dirname(puente)
+    anios = range(int(desde[:4]), int(hasta[:4]) + 1)
+    carpetas = [os.path.join(raiz, str(a)) for a in anios if os.path.isdir(os.path.join(raiz, str(a)))]
+    if not carpetas:
+        return None, "no encontre la carpeta %s en %s" % ("/".join(str(a) for a in anios), raiz)
+    return (raiz, carpetas), None
+
+
+def _familia(grupo):
+    """VINATITA y VINATITA II URIQUE se comparan juntas (igual que el filtro
+    del visor). El resto de las procedencias van tal cual."""
+    g = _sin_acentos(grupo)
+    if not g:
+        return ""
+    for k in (CFG.get("cuadre_familias") or {"VINATITA": "VINATITA"}).items():
+        if g.startswith(k[0]):
+            return k[1]
+    return g
+
+
+def _es_incompleto(b):
+    return (not b.get("tara")) or (not b.get("neto")) or (b.get("neto") or 0) <= 0
+
+
+def _llave(*partes):
+    return hashlib.sha1("|".join(str(p) for p in partes).encode("utf-8")).hexdigest()[:12]
+
+
+def _ton(kg):
+    return round((kg or 0) / 1000.0, 3)
+
+
+def cuadrar(excels, boletos, hoy_txt):
+    """El corazon. Sin red, sin disco: entra Excel y boletos, sale el reporte.
+
+    excels  = {nombre_archivo: [filas de leer_excel_fletes]}
+    boletos = [registros de Firebase (cerrados)]
+    """
+    def dia(f):
+        return datetime.strptime(f, "%Y-%m-%d")
+
+    for b in boletos:
+        b["_f"] = (b.get("entrada") or b.get("salida") or b.get("_fecha") or "")[:10]
+    por_peso = {}
+    for b in boletos:
+        if b.get("bruto") and b.get("tara") is not None:
+            por_peso.setdefault((int(b["bruto"]), int(b["tara"])), []).append(b)
+
+    usados = {}          # boleto -> (archivo, fila)
+    filas_todas = []     # (archivo, fila_dict, boleto_o_None, tipo)
+
+    # --- 1) cuadre exacto, archivo por archivo (cada boleto una vez por archivo)
+    for arch, filas in sorted(excels.items()):
+        tomados = set()
+        for r in sorted(filas, key=lambda x: (x["fecha"], x["fila"])):
+            mejor = None
+            for b in por_peso.get((r["bruto"], r["tara"]), []):
+                if b["boleto"] in tomados or not b["_f"]:
+                    continue
+                dd = abs((dia(b["_f"]) - dia(r["fecha"])).days)
+                if dd <= CUADRE_DIAS and (mejor is None or dd < mejor[0]):
+                    mejor = (dd, b)
+            if mejor:
+                b = mejor[1]
+                tomados.add(b["boleto"])
+                usados.setdefault(b["boleto"], (arch, r["fila"]))
+                filas_todas.append([arch, r, b, "ok"])
+            else:
+                filas_todas.append([arch, r, None, None])
+
+    # --- 2) peso distinto: lo que no cuadro, contra boletos que nadie tomo
+    libres = [b for b in boletos if b["boleto"] not in usados and b.get("bruto")]
+    for item in filas_todas:
+        if item[2] is not None:
+            continue
+        r = item[1]
+        mejor = None
+        for b in libres:
+            if b["boleto"] in usados or not b["_f"]:
+                continue
+            dd = abs((dia(b["_f"]) - dia(r["fecha"])).days)
+            if dd > 1:
+                continue
+            db = abs(int(b["bruto"]) - r["bruto"])
+            dt = abs(int(b.get("tara") or 0) - r["tara"])
+            if (db == 0 and 0 < dt <= CUADRE_TOL_KG) or (dt == 0 and 0 < db <= CUADRE_TOL_KG):
+                score = (dd, db + dt)
+                if mejor is None or score < mejor[0]:
+                    mejor = (score, b)
+        if mejor:
+            b = mejor[1]
+            usados[b["boleto"]] = (item[0], r["fila"])
+            item[2] = b
+            item[3] = "peso"
+
+    # --- 3) que procedencias lleva cada archivo: las que cuadran seguido
+    # (un archivo puede llevar dos: Arturo Quezada sale en bascula como
+    # MINERAL ARTURO QUEZADA y como SAN LORENZO ING AQ). Un boleto suelto de
+    # otra procedencia no cuenta: ese es justo el que hay que avisar.
+    fams_arch, prim_arch = {}, {}
+    for arch in excels:
+        cuenta = {}
+        for a, r, b, t in filas_todas:
+            if a == arch and b is not None:
+                k = _familia(b.get("grupo"))
+                cuenta[k] = cuenta.get(k, 0) + 1
+        if not cuenta:
+            continue
+        total = sum(cuenta.values())
+        prim_arch[arch] = max(cuenta.items(), key=lambda x: x[1])[0]
+        fams_arch[arch] = {k for k, n in cuenta.items() if n >= max(2, total * 0.1)} | {prim_arch[arch]}
+
+    # procedencias que comparten archivo se reportan juntas
+    padre = {}
+    def raiz_de(x):
+        while padre.setdefault(x, x) != x:
+            x = padre[x]
+        return x
+    for fs in fams_arch.values():
+        fs = sorted(fs)
+        for f in fs:
+            raiz_de(f)
+        for f in fs[1:]:
+            padre[raiz_de(f)] = raiz_de(fs[0])
+    miembros = {}
+    for f in padre:
+        miembros.setdefault(raiz_de(f), set()).add(f)
+    nombre_grupo = {}
+    for r_, ms in miembros.items():
+        for f in ms:
+            nombre_grupo[f] = " + ".join(sorted(ms))
+
+    def grupo_de_fam(fam):
+        return nombre_grupo.get(fam)
+
+    def grupo_de_fila(a, b):
+        if b is not None and _familia(b.get("grupo")) in fams_arch.get(a, ()):
+            return nombre_grupo[_familia(b.get("grupo"))]
+        return nombre_grupo.get(prim_arch.get(a))
+
+    # hasta donde cubre cada grupo: fecha y hora del ultimo boleto cuadrado
+    cubre = {}
+    for a, r, b, t in filas_todas:
+        g = grupo_de_fila(a, b)
+        if not g:
+            continue
+        c = cubre.setdefault(g, {"desde": r["fecha"], "hasta": r["fecha"], "ult": "", "archivos": set()})
+        c["archivos"].add(a)
+        c["desde"] = min(c["desde"], r["fecha"])
+        c["hasta"] = max(c["hasta"], r["fecha"])
+        if b is not None and grupo_de_fam(_familia(b.get("grupo"))) == g:
+            c["ult"] = max(c["ult"], b.get("entrada") or "")
+
+    alertas = {}
+
+    def lado_excel(arch, r):
+        return {"archivo": arch, "hoja": r["hoja"], "fila": r["fila"], "fecha": r["fecha"],
+                "bruto": r["bruto"], "tara": r["tara"], "neto": r["bruto"] - r["tara"],
+                "chofer": r.get("chofer"), "camion": r.get("camion"), "lote": r.get("lote")}
+
+    def lado_bascula(b):
+        return {"boleto": b["boleto"], "fecha": b["_f"], "entrada": b.get("entrada"),
+                "bruto": b.get("bruto"), "tara": b.get("tara"), "neto": b.get("neto"),
+                "chofer": b.get("chofer"), "placas": b.get("placas"),
+                "procedencia": b.get("procedencia"), "grupo": b.get("grupo")}
+
+    for a, r, b, t in filas_todas:
+        if a not in fams_arch:
+            continue          # archivo que no cuadra con nada: no es de bascula
+        fam = grupo_de_fila(a, b) or ""
+        if r.get("neto") is not None and abs(r["neto"] - (r["bruto"] - r["tara"])) > 1:
+            k = "n-" + _llave(a, r["hoja"], r["fecha"], r["bruto"], r["tara"])
+            alertas[k] = {"tipo": "neto", "familia": fam, "fecha": r["fecha"],
+                          "excel": dict(lado_excel(a, r), neto_excel=r["neto"]),
+                          "bascula": lado_bascula(b) if b else None,
+                          "pista": "En el Excel el neto dice %s y bruto - tara da %s. Revisar la celda %s%s."
+                                   % ("{:,}".format(r["neto"]), "{:,}".format(r["bruto"] - r["tara"]),
+                                      r.get("c_neto") or "", r["fila"])}
+        if b is None:
+            k = "x-" + _llave(a, r["hoja"], r["fecha"], r["bruto"], r["tara"])
+            alertas[k] = {"tipo": "falta_bascula", "familia": fam, "fecha": r["fecha"],
+                          "excel": lado_excel(a, r), "bascula": None,
+                          "pista": "No hay boleto con ese bruto y tara entre el %s y el %s."
+                                   % (_fecha_corta(dia(r["fecha"]) - timedelta(days=CUADRE_DIAS)),
+                                      _fecha_corta(dia(r["fecha"]) + timedelta(days=CUADRE_DIAS)))}
+            continue
+        if t == "peso":
+            campos, celda = [], []
+            if int(b["bruto"]) != r["bruto"]:
+                campos.append("bruto"); celda.append("%s%s" % (r["c_bruto"], r["fila"]))
+            if int(b.get("tara") or 0) != r["tara"]:
+                campos.append("tara"); celda.append("%s%s" % (r["c_tara"], r["fila"]))
+            alertas["p-%s" % b["boleto"]] = {
+                "tipo": "peso", "familia": fam, "fecha": r["fecha"], "boleto": b["boleto"],
+                "dif": campos, "excel": lado_excel(a, r), "bascula": lado_bascula(b),
+                "pista": "Difiere %s en %s kg. Revisar la celda %s del Excel o el boleto."
+                         % (" y ".join(campos),
+                            "{:,}".format(abs(int(b["bruto"]) - r["bruto"]) + abs(int(b.get("tara") or 0) - r["tara"])),
+                            ", ".join(celda))}
+        if a in fams_arch and _familia(b.get("grupo")) not in fams_arch[a]:
+            alertas["d-%s" % b["boleto"]] = {
+                "tipo": "procedencia", "familia": fam, "fecha": r["fecha"], "boleto": b["boleto"],
+                "dif": ["procedencia"], "excel": lado_excel(a, r), "bascula": lado_bascula(b),
+                "pista": "El Excel %s lo trae, pero báscula lo registró como %s."
+                         % (re.sub(r"\.xlsx$", "", a.split("/")[-1], flags=re.I), b.get("procedencia") or b.get("grupo") or "?")}
+
+    # --- 4) boletos de bascula sin fila, dentro de lo que el Excel ya cubre
+    for b in boletos:
+        if b["boleto"] in usados or not b["_f"]:
+            continue
+        fam = grupo_de_fam(_familia(b.get("grupo")))
+        c = cubre.get(fam)
+        if not c or b["_f"] < c["desde"] or b["_f"] > c["hasta"]:
+            continue
+        if b["_f"] == c["hasta"] and (b.get("entrada") or "") > c["ult"]:
+            continue          # el Excel aun no llega a ese camion
+        if _es_incompleto(b):
+            continue          # va como incompleto, abajo
+        pista = "No aparece en %s." % ", ".join(sorted(re.sub(r"\.xlsx$", "", x.split("/")[-1], flags=re.I) for x in c["archivos"]))
+        for o in boletos:
+            if o is b or o["_f"] != b["_f"] or not o.get("bruto"):
+                continue
+            mismo_chofer = (o.get("chofer") or "") == (b.get("chofer") or "") and b.get("chofer")
+            if mismo_chofer and abs(int(o["bruto"]) - int(b["bruto"])) <= 20:
+                pista = ("Mismo chofer, día y bruto que el boleto %s (ese sí está en el Excel). "
+                         "Posible pesada duplicada." % o["boleto"]) if o["boleto"] in usados else pista
+                break
+        alertas["s-%s" % b["boleto"]] = {"tipo": "falta_excel", "familia": fam, "fecha": b["_f"],
+                                         "boleto": b["boleto"], "excel": None,
+                                         "bascula": lado_bascula(b), "pista": pista}
+
+    # --- 5) boletos incompletos de las procedencias que llevan Excel
+    for b in boletos:
+        fam = grupo_de_fam(_familia(b.get("grupo")))
+        c = cubre.get(fam)
+        if not c or not b["_f"] or b["_f"] < c["desde"] or not _es_incompleto(b):
+            continue
+        que = "tara 0" if not b.get("tara") else "neto 0"
+        alertas["i-%s" % b["boleto"]] = {
+            "tipo": "incompleto", "familia": fam, "fecha": b["_f"], "boleto": b["boleto"],
+            "dif": ["tara" if que == "tara 0" else "neto"],
+            "excel": lado_excel(*usados_fila(usados, b, filas_todas)) if b["boleto"] in usados else None,
+            "bascula": lado_bascula(b),
+            "pista": "Boleto con %s en báscula.%s" % (que, " Infla el total %s t." % _ton(b.get("neto"))
+                                                     if que == "tara 0" and b.get("neto") else "")}
+
+    # --- 6) resumen por procedencia
+    por_fam = {}
+    for a, r, b, t in filas_todas:
+        fam = grupo_de_fila(a, b)
+        if not fam:
+            continue
+        p = por_fam.setdefault(fam, {"familia": fam, "archivos": set(), "viajes_excel": 0, "cuadran": 0,
+                                     "kg_excel": 0, "kg_bascula": 0, "filas": [], "sin_fila": [],
+                                     "alertas": 0})
+        p["archivos"].add(a)
+        p["viajes_excel"] += 1
+        p["kg_excel"] += r["bruto"] - r["tara"]
+        if b is not None and t == "ok" and grupo_de_fam(_familia(b.get("grupo"))) == fam:
+            p["cuadran"] += 1
+    for b in boletos:
+        fam = grupo_de_fam(_familia(b.get("grupo")))
+        c = cubre.get(fam)
+        if fam in por_fam and c and c["desde"] <= b["_f"] <= c["hasta"] and \
+                not (b["_f"] == c["hasta"] and (b.get("entrada") or "") > c["ult"]):
+            por_fam[fam]["kg_bascula"] += int(b.get("neto") or 0)
+    for k, al in alertas.items():
+        p = por_fam.get(al.get("familia"))
+        if not p:
+            continue
+        p["alertas"] += 1
+        if al.get("excel"):
+            p["filas"].append("%s·%s" % (al["excel"]["archivo"], al["excel"]["fila"]))
+        elif al.get("boleto"):
+            p["sin_fila"].append(al["boleto"])
+
+    resumen = {}
+    for fam, p in por_fam.items():
+        c = cubre.get(fam) or {}
+        resumen[clave_fb(fam)] = {
+            "familia": fam, "archivos": sorted(p["archivos"]), "viajes_excel": p["viajes_excel"],
+            "cuadran": p["cuadran"], "t_excel": _ton(p["kg_excel"]), "t_bascula": _ton(p["kg_bascula"]),
+            "diferencia_t": _ton(p["kg_bascula"] - p["kg_excel"]),
+            "desde": c.get("desde"), "hasta": c.get("hasta"),
+            "filas": sorted(set(p["filas"]))[:60], "sin_fila": sorted(set(p["sin_fila"]))[:60],
+            "alertas": p["alertas"],
+        }
+    # Tope de seguridad: si algo sale muy raro (un Excel nuevo con otro
+    # formato, Firebase a medias) no se manda una avalancha. Se quedan las
+    # mas recientes y se avisa.
+    recortadas = 0
+    if len(alertas) > CUADRE_MAX_ALERTAS:
+        orden = sorted(alertas, key=lambda k: alertas[k].get("fecha") or "", reverse=True)
+        recortadas = len(alertas) - CUADRE_MAX_ALERTAS
+        alertas = {k: alertas[k] for k in orden[:CUADRE_MAX_ALERTAS]}
+    viajes = sum(p["viajes_excel"] for p in por_fam.values())
+    cuadran = sum(p["cuadran"] for p in por_fam.values())
+    return {"lista": alertas, "por_procedencia": resumen,
+            "viajes_excel": viajes, "cuadran": cuadran,
+            "archivos_leidos": len(excels), "archivos_con_datos": len(fams_arch),
+            "recortadas": recortadas,
+            "sin_cuadre": sorted(a for a in excels if a not in fams_arch)}
+
+
+def usados_fila(usados, b, filas_todas):
+    arch, fila = usados[b["boleto"]]
+    for a, r, bb, t in filas_todas:
+        if a == arch and r["fila"] == fila:
+            return a, r
+    return arch, {"hoja": "", "fila": fila, "fecha": b["_f"], "bruto": 0, "tara": 0}
+
+
+def _fecha_corta(d):
+    meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+    return "%d-%s-%02d" % (d.day, meses[d.month - 1], d.year % 100)
+
+
+def _cuadre_cache_leer():
+    try:
+        with open(ARCHIVO_CUADRE_CACHE, "r", encoding="utf-8") as f:
+            c = json.load(f)
+        return c if isinstance(c, dict) else {}
+    except Exception:
+        return {}
+
+
+def _cuadre_cache_guardar(c):
+    try:
+        tmp = ARCHIVO_CUADRE_CACHE + ".nuevo"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(c, f, ensure_ascii=False)
+        os.replace(tmp, ARCHIVO_CUADRE_CACHE)
+    except Exception as e:
+        log("Alertas: no se pudo guardar la memoria local (%s)." % e, "WARN")
+
+
+def revisar_cuadre(hoy):
+    """Corre el cuadre si toca. Devuelve un texto corto para /salud."""
+    if not CFG.get("cuadre", True):
+        return "apagado"
+    t0 = time.time()
+    hoy_txt = hoy.strftime("%Y-%m-%d")
+    desde = str(CFG.get("cuadre_desde") or "2026-09-01")[:10]
+    cache = _cuadre_cache_leer()
+
+    carpetas, error = _carpetas_excel(desde, hoy_txt)
+    if error:
+        log("Alertas: %s." % error, "WARN")
+        enviar("alertas/estado", {"ok": False, "error": error,
+                                  "revisado": datetime.now().isoformat(timespec="seconds")})
+        return error
+    raiz, lista_carpetas = carpetas
+
+    # Que archivos hay y como estan. Solo se re-lee el que cambio.
+    archivos = {}
+    for carpeta in lista_carpetas:
+        for dirpath, _, nombres in os.walk(carpeta):
+            for n in nombres:
+                if not n.lower().endswith(".xlsx") or n.startswith("~$"):
+                    continue
+                ruta = os.path.join(dirpath, n)
+                try:
+                    st = os.stat(ruta)
+                except Exception:
+                    continue
+                rel = os.path.relpath(ruta, raiz).replace("\\", "/")
+                archivos[rel] = (ruta, "%d-%d" % (int(st.st_mtime), st.st_size))
+    firma = hashlib.sha1(json.dumps(sorted((k, v[1]) for k, v in archivos.items())).encode()).hexdigest()
+
+    cada = max(3, int(CFG.get("cuadre_cada_min", 15)))
+    ultimo = cache.get("ultimo") or ""
+    if cache.get("firma") == firma and cache.get("desde") == desde and ultimo and \
+            (datetime.now() - datetime.fromisoformat(ultimo)).total_seconds() < cada * 60:
+        return "sin cambios"
+
+    previo = cache.get("archivos") or {}
+    nuevos = {}
+    errores = []
+    for rel, (ruta, huella) in archivos.items():
+        p = previo.get(rel)
+        if p and p.get("huella") == huella and p.get("desde") == desde:
+            nuevos[rel] = p
+            continue
+        try:
+            filas = leer_excel_fletes(ruta, desde, hoy_txt)
+            nuevos[rel] = {"huella": huella, "desde": desde, "filas": filas}
+        except Exception as e:
+            errores.append("%s (%s)" % (rel, e))
+            if p:
+                nuevos[rel] = p          # se queda con lo ultimo que si pudo leer
+    excels = {}
+    for rel, p in nuevos.items():
+        if p.get("filas"):
+            nombre = rel.split("/", 1)[-1]
+            excels[nombre] = p["filas"]
+
+    # Boletos ya cerrados en Firebase. Para no bajar semanas de boletos cada
+    # 15 minutos, se guardan en la memoria local: el rango completo se baja
+    # una vez al dia y en las demas vueltas solo los ultimos 3 dias.
+    ini = (datetime.strptime(desde, "%Y-%m-%d") - timedelta(days=CUADRE_DIAS)).strftime("%Y-%m-%d")
+    dias_b = cache.get("bol_dias") or {}
+    completo = cache.get("bol_full") != hoy_txt or cache.get("bol_ini") != ini
+    pedir_desde = ini if completo else (hoy - timedelta(days=3)).strftime("%Y-%m-%d")
+    datos = firebase_get_rango("boletos", pedir_desde, hoy_txt)
+    if datos is None:
+        return "sin red"
+    if completo:
+        dias_b = {}
+    for f in [f for f in dias_b if f >= pedir_desde or f < ini]:
+        del dias_b[f]
+    campos = ("boleto", "entrada", "salida", "bruto", "tara", "neto", "grupo",
+              "procedencia", "chofer", "placas")
+    for fecha_k, dia_b in datos.items():
+        if not isinstance(dia_b, dict):
+            continue
+        guardar = {}
+        for k, b in dia_b.items():
+            if not isinstance(b, dict) or b.get("abierto") or b.get("origen_dato") == "excel":
+                continue
+            if not str(k).isdigit():
+                continue
+            guardar[str(k)] = {c: b.get(c) for c in campos if b.get(c) is not None}
+        dias_b[fecha_k] = guardar
+    boletos = []
+    for fecha_k, dia_b in dias_b.items():
+        for b in dia_b.values():
+            b = dict(b)
+            b["_fecha"] = fecha_k
+            boletos.append(b)
+    if completo:
+        cache["bol_full"] = hoy_txt
+        cache["bol_ini"] = ini
+    cache["bol_dias"] = dias_b
+
+    rep = cuadrar(excels, boletos, hoy_txt)
+    rep["estado"] = {
+        "ok": True, "revisado": datetime.now().isoformat(timespec="seconds"),
+        "desde": desde, "carpeta": raiz, "archivos_vistos": len(archivos),
+        "archivos_con_datos": rep.pop("archivos_con_datos"), "archivos_leidos": rep.pop("archivos_leidos"),
+        "recortadas": rep.pop("recortadas") or None, "sin_cuadre": rep.pop("sin_cuadre") or None,
+        "errores": errores[:10] or None, "segundos": round(time.time() - t0, 1),
+        "agente": VERSION,
+    }
+    enviar("alertas", rep)
+    cache.update({"firma": firma, "desde": desde, "ultimo": datetime.now().isoformat(timespec="seconds"),
+                  "archivos": nuevos})
+    _cuadre_cache_guardar(cache)
+    txt = "%d alertas, %d de %d viajes cuadran" % (len(rep["lista"]), rep["cuadran"], rep["viajes_excel"])
+    log("Alertas: %s (%.1fs)." % (txt, time.time() - t0))
+    return txt
+
+
 def rango_dia(fecha):
     d = fecha.strftime("%Y-%m-%d")
     return "%s 00:00" % d, "%s 23:59" % d
@@ -1692,6 +2387,20 @@ def main():
         marcar_orden(carga)
         log("CARGA HISTORICA terminada: %d dias, %d boletos." % (len(dias), total_cerrados))
 
+    # ---- V4.4: alertas (cuadre contra los Excel de fletes) ----
+    # Va despues de mandar los boletos, para comparar contra lo mas nuevo.
+    # Nunca en una carga larga ni en modo observacion. Envuelto: un Excel
+    # raro no puede tumbar el latido ni el envio de boletos.
+    alertas_txt = None
+    if not CFG.get("modo_observacion") and not (carga or carga_xls or recalculo):
+        try:
+            vaciar_lote()
+            if not RED_CAIDA[0]:
+                alertas_txt = revisar_cuadre(hoy)
+        except Exception as e:
+            alertas_txt = "error: %s" % e
+            log("Alertas: no se pudo hacer el cuadre (%s). Sigue todo igual." % e, "WARN")
+
     # ---- latido de salud: es lo que permite el sello de frescura del visor ----
     # Se vacia el lote ANTES de armar el latido, para que el conteo que
     # reporta sea el real y no el de antes del ultimo envio.
@@ -1717,6 +2426,7 @@ def main():
         "campanas_abiertas": campanas_abiertas or None,
         "recalculo": recalculo or None,
         "version_pendiente": version_nueva,
+        "alertas": alertas_txt,
         "carpeta": BASE,
     }
     vaciar_lote()
