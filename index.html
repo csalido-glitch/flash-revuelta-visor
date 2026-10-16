@@ -591,6 +591,31 @@ body.con-login{overflow:hidden}
 .usuario{font-size:12px;color:var(--muted);white-space:nowrap}
 .cp-avance{height:8px;background:var(--grid);border-radius:4px;overflow:hidden;margin-top:4px;min-width:90px}
 .cp-avance i{display:block;height:100%;background:var(--s1)} .cp-avance i.lleno{background:var(--gold)}
+.tab .badge.rojo{background:var(--critical);color:#fff}
+.tab[aria-selected="true"] .badge.rojo{background:var(--critical);color:#fff}
+/* V19.11 · Alertas */
+.al-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.al-kpi{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--plane)}
+.al-kpi .n{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}.al-kpi .l{font-size:12px;color:var(--ink-2)}
+.al-kpi.ok .n{color:var(--good)}.al-kpi.mal .n{color:var(--critical)}
+.al-chips{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 12px}
+.al-chip{font:inherit;font-size:12.5px;border:1px solid var(--border);background:var(--surface);color:var(--ink-2);border-radius:999px;padding:5px 12px;cursor:pointer}
+.al-chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.al-card{border:1px solid var(--border);border-left:4px solid var(--critical);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--surface)}
+.al-card.t-peso{border-left-color:var(--warning)}.al-card.t-procedencia{border-left-color:var(--s7)}
+.al-card.t-falta_bascula{border-left-color:var(--s1)}.al-card.t-incompleto{border-left-color:var(--muted)}.al-card.t-neto{border-left-color:var(--s2)}
+.al-card.rev{opacity:.6}
+.al-h{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.al-tipo{font-weight:800}.al-donde{color:var(--ink-2);font-size:12.5px}
+.al-fila{display:inline-block;background:var(--navy);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700}
+.al-fila.sin{background:var(--grid);color:var(--ink-2);font-weight:600}
+.al-cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin-top:8px}
+.al-lado{background:var(--plane);border-radius:8px;padding:8px 10px;font-size:13px}
+.al-lado b.t{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.al-dif{background:color-mix(in srgb,var(--critical) 16%,transparent);color:var(--critical);padding:0 4px;border-radius:4px;font-weight:800}
+.al-pista{font-size:12.5px;color:var(--ink-2);background:color-mix(in srgb,var(--gold) 14%,transparent);border-radius:6px;padding:4px 8px;margin-top:8px;display:inline-block}
+.al-acc{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.al-aviso{border:1px solid color-mix(in srgb,var(--warning) 50%,var(--border));background:color-mix(in srgb,var(--warning) 12%,transparent);border-radius:10px;padding:8px 12px;font-size:13px;margin-top:10px}
 .pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;font-weight:700}
 .pill.azul{background:color-mix(in srgb,var(--s1) 14%,transparent);color:var(--s1)}
 .pill.oro{background:color-mix(in srgb,var(--gold) 22%,transparent);color:var(--gold-ink)}
@@ -648,6 +673,7 @@ details summary{cursor:pointer}
       <button class="tab" role="tab" aria-selected="false" data-t="historico">Histórico</button>
       <button class="tab" role="tab" aria-selected="false" data-t="cdet">Campañas detalle</button>
       <button class="tab oculto" role="tab" aria-selected="false" data-t="campanas">Campañas</button>
+      <button class="tab oculto" role="tab" aria-selected="false" data-t="alertas">Alertas<span class="badge" id="bAlertas">0</span></button>
       <button class="tab oculto" role="tab" aria-selected="false" data-t="usuarios">Usuarios</button>
     </nav>
     <div class="spacer"></div>
@@ -911,12 +937,32 @@ details summary{cursor:pointer}
     <div class="card"><details><summary><b>Registro de cambios</b> <span class="nota">(no se puede borrar)</span></summary><div class="log" id="cpLog"></div></details></div>
   </section>
 
+  <!-- ================= ALERTAS (V19.11, permiso «Alertas») ================= -->
+  <section id="p-alertas" class="oculto">
+    <div class="card">
+      <h2>Alertas: báscula vs. Excel de fletes</h2>
+      <p class="sub" id="alSub">Cargando…</p>
+      <div class="al-kpis" id="alKpis"></div>
+      <div id="alAvisos"></div>
+    </div>
+    <div class="card">
+      <h2>Por Excel</h2>
+      <div class="tabla-caja"><table><thead><tr><th>Excel</th><th>Procedencia en báscula</th><th class="num">Viajes Excel</th><th class="num">Cuadran</th><th class="num">t Excel</th><th class="num">t Báscula</th><th class="num">Diferencia (t)</th><th>Filas con alerta</th><th>Estado</th></tr></thead><tbody id="alTabla"></tbody></table></div>
+      <p class="nota" style="margin-top:8px">Diferencia = báscula − Excel, en las fechas que el Excel ya tiene capturadas. Vinatita I y II se comparan juntas.</p>
+    </div>
+    <div class="card">
+      <h2>Alertas una por una</h2>
+      <div class="al-chips" id="alChips"></div>
+      <div id="alLista"></div>
+    </div>
+  </section>
+
   <!-- ================= USUARIOS (V19, solo quien gestiona usuarios) ================= -->
   <section id="p-usuarios" class="oculto">
     <div class="card">
       <h2>Usuarios autorizados</h2>
       <p class="sub">Solo entran los correos de esta lista. Quitar a alguien le cierra el acceso al instante.</p>
-      <div class="tabla-caja"><table><thead><tr><th>Correo</th><th>Consulta</th><th>Gestiona usuarios</th><th>Gestiona campañas</th><th>Alta</th><th></th></tr></thead><tbody id="usLista"></tbody></table></div>
+      <div class="tabla-caja"><table><thead><tr><th>Correo</th><th>Consulta</th><th>Gestiona usuarios</th><th>Gestiona campañas</th><th>Alertas</th><th>Alta</th><th></th></tr></thead><tbody id="usLista"></tbody></table></div>
     </div>
     <div class="card">
       <h2>Agregar usuario</h2>
@@ -925,7 +971,8 @@ details summary{cursor:pointer}
         <div class="campo"><label>Correo</label><input id="usCorreo" type="email" placeholder="nombre@mrtcorporativo.mx"></div>
         <div><div class="campo"><label>Permisos</label></div>
           <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usU"> Gestiona usuarios</label>
-          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usC"> Gestiona campañas</label></div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usC"> Gestiona campañas</label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usA"> Alertas</label></div>
         <div><button class="btn pri" id="usAgregar">Agregar</button></div>
       </div>
       <div class="nota" id="usMsg"></div>
@@ -936,7 +983,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.10 · 16-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.11 · 16-oct-2026)</span>
   </p>
 </div>
 
@@ -1152,6 +1199,7 @@ async function despuesDeEntrar(){
   $("#uCorreo").textContent = AUTH.email;
   $$('.tab[data-t="campanas"]').forEach(b => b.classList.toggle("oculto", !perm.gestiona_campanas));
   $$('.tab[data-t="usuarios"]').forEach(b => b.classList.toggle("oculto", !perm.gestiona_usuarios));
+  $$('.tab[data-t="alertas"]').forEach(b => b.classList.toggle("oculto", !perm.alertas));
   arrancar();
 }
 
@@ -1586,15 +1634,15 @@ async function cargarUsuarios(){
     const soyGC = !!(AUTH.perm && AUTH.perm.gestiona_campanas), protegido = u.gestiona_campanas && !soyGC;
     const caja = (campo) => `<input type="checkbox" data-k="${esc(k)}" data-c="${campo}" ${u[campo] ? "checked" : ""} ${(yo || protegido || (campo==="gestiona_campanas" && !soyGC)) ? "disabled" : ""}>`;
     return `<tr><td>${esc(u.correo)}${yo ? ' <span class="nota">(tú)</span>' : ""}</td><td>Sí</td>
-      <td>${caja("gestiona_usuarios")}</td><td>${caja("gestiona_campanas")}</td>
+      <td>${caja("gestiona_usuarios")}</td><td>${caja("gestiona_campanas")}</td><td>${caja("alertas")}</td>
       <td class="nota">${esc(u.alta||"")}</td><td>${(yo || protegido) ? "" : `<button class="btn" data-quitar="${esc(k)}">Quitar</button>`}</td></tr>`;
   });
-  $("#usLista").innerHTML = filas.join("") || '<tr><td colspan="6">Sin usuarios.</td></tr>';
+  $("#usLista").innerHTML = filas.join("") || '<tr><td colspan="7">Sin usuarios.</td></tr>';
   $$("#usLista input[type=checkbox]").forEach(c => c.addEventListener("change", async () => {
     const k = c.dataset.k, cambios = {};
     cambios[`autorizados/${k}/${c.dataset.c}`] = c.checked;
     cambios[`autorizados_historial/${idHist()}`] = {cuando:ahoraISO(), quien:AUTH.email,
-      que:`${lista[k].correo}: ${c.dataset.c==="gestiona_usuarios" ? "gestiona usuarios" : "gestiona campañas"} = ${c.checked ? "sí" : "no"}`};
+      que:`${lista[k].correo}: ${({gestiona_usuarios:"gestiona usuarios", gestiona_campanas:"gestiona campañas", alertas:"alertas"})[c.dataset.c] || c.dataset.c} = ${c.checked ? "sí" : "no"}`};
     try{ await fb("PATCH", "/", cambios); await cargarUsuarios(); }catch(e){ $("#usMsg").textContent = e.message; $("#usMsg").className = "nota bad"; }
   }));
   $$("#usLista [data-quitar]").forEach(b => b.addEventListener("click", async () => {
@@ -1612,10 +1660,10 @@ $("#usAgregar").addEventListener("click", async () => {
   if(!correoValido(e)){ m.textContent = "Solo correos "+DOMINIO; m.className = "nota bad"; return; }
   const k = llaveCorreo(e), cambios = {};
   cambios[`autorizados/${k}`] = {correo:e, consulta:true, gestiona_usuarios:$("#usU").checked, gestiona_campanas:$("#usC").checked,
-                                 alta:fechaCorta2(new Date()), alta_por:AUTH.email};
+                                 alertas:$("#usA").checked, alta:fechaCorta2(new Date()), alta_por:AUTH.email};
   cambios[`autorizados_historial/${idHist()}`] = {cuando:ahoraISO(), quien:AUTH.email, que:`${e}: agregado`};
   try{ await fb("PATCH", "/", cambios); m.textContent = "Agregado. Avísale que entre con «Es mi primera vez»."; m.className = "nota ok";
-       $("#usCorreo").value = ""; $("#usU").checked = false; $("#usC").checked = false; await cargarUsuarios(); }
+       $("#usCorreo").value = ""; $("#usU").checked = false; $("#usC").checked = false; $("#usA").checked = false; await cargarUsuarios(); }
   catch(err){ m.textContent = err.message; m.className = "nota bad"; }
 });
 
@@ -1856,7 +1904,8 @@ $("#cdProc").addEventListener("change", pintarCdet);
 
 $$(".tab").forEach(b => b.addEventListener("click", ()=>{
   $$(".tab").forEach(x => x.setAttribute("aria-selected", x===b ? "true":"false"));
-  ["hoy","patio","historico","cdet","detalle","campanas","usuarios"].forEach(t => $("#p-"+t).classList.toggle("oculto", t!==b.dataset.t));
+  ["hoy","patio","historico","cdet","detalle","campanas","alertas","usuarios"].forEach(t => $("#p-"+t).classList.toggle("oculto", t!==b.dataset.t));
+  if(b.dataset.t==="alertas") cargarAlertas(true);
   if(b.dataset.t==="cdet") pintarCdet();
   if(b.dataset.t==="campanas") cargarCampanas();
   if(b.dataset.t==="usuarios") cargarUsuarios();
@@ -3162,12 +3211,159 @@ async function cargar(){
   if(!$("#p-detalle").classList.contains("oculto")) cargarDetalle();
 }
 
+
+/* ===================================================================
+   V19.11 · ALERTAS: báscula contra los Excel de fletes
+   El agente (V4.4) compara y sube el resultado a /alertas. Aquí solo se
+   muestra; lo único que se escribe es «revisada» en /alertas_revisadas.
+   =================================================================== */
+const AL = { datos:null, rev:{}, f:"todas", revisado:null };
+const AL_TIPOS = {
+  falta_excel:   "En báscula, no en Excel",
+  procedencia:   "Procedencia distinta",
+  peso:          "Peso distinto",
+  falta_bascula: "En Excel, no en báscula",
+  incompleto:    "Boleto incompleto",
+  neto:          "Neto mal calculado en el Excel"
+};
+const kgF = n => (n==null || isNaN(n)) ? "—" : Number(n).toLocaleString("es-MX");
+const tF  = n => (n==null || isNaN(n)) ? "—" : Number(n).toLocaleString("es-MX",{minimumFractionDigits:3,maximumFractionDigits:3});
+const sinXlsx = a => String(a||"").split("/").pop().replace(/\.xlsx$/i,"");
+async function cargarAlertas(forzar){
+  if(!(AUTH.perm && AUTH.perm.alertas)) return;
+  if(!forzar && AL.datos){
+    const r = await traer("/alertas/estado/revisado");
+    if(r && r === AL.revisado){ AL.rev = (await traer("/alertas_revisadas")) || {}; return pintarAlertas(); }
+  }
+  const [d, rv] = await Promise.all([traer("/alertas"), traer("/alertas_revisadas")]);
+  AL.datos = d || {}; AL.rev = rv || {};
+  AL.revisado = (AL.datos.estado||{}).revisado || null;
+  pintarAlertas();
+}
+function alPendientes(){
+  const l = (AL.datos && AL.datos.lista) || {};
+  return Object.keys(l).filter(k => !AL.rev[k]);
+}
+function alBadge(){
+  const n = alPendientes().length, b = $("#bAlertas");
+  if(!b) return;
+  b.textContent = n; b.classList.toggle("rojo", n>0);
+}
+function alFecha(iso){ if(!iso) return "—"; return /Z$|[+-]\d\d:\d\d$/.test(String(iso)) ? fechaCorta2(new Date(iso)) : cdFecha(iso); }
+function alHora(iso){ return iso && String(iso).length>11 ? " "+hhmm(iso) : ""; }
+function pintarAlertas(){
+  alBadge();
+  if($("#p-alertas").classList.contains("oculto") && AL.pintado) return;
+  AL.pintado = true;
+  const d = AL.datos || {}, e = d.estado || {}, lista = d.lista || {}, pp = d.por_procedencia || {};
+  if(!e.revisado){
+    $("#alSub").textContent = "Todavía no hay resultados. El agente de báscula (V4.4) los sube en su siguiente vuelta.";
+    $("#alKpis").innerHTML = ""; $("#alTabla").innerHTML = ""; $("#alChips").innerHTML = ""; $("#alLista").innerHTML = "";
+    $("#alAvisos").innerHTML = e.error ? `<div class="al-aviso">⚠ ${esc(e.error)}</div>` : "";
+    return;
+  }
+  const hace = Math.round((Date.now() - new Date(e.revisado)) / 60000);
+  $("#alSub").innerHTML = `El agente compara los Excel de <b>Dropbox · 21.-Bascula</b> contra los boletos de báscula (desde el ${alFecha(e.desde)}). `
+    + `Última revisión: <b>${alFecha(e.revisado)}${alHora(e.revisado)}</b>.`;
+  const pend = alPendientes().length, viajes = d.viajes_excel||0, cuad = d.cuadran||0;
+  let mayor = null;
+  Object.values(pp).forEach(p => { if(!mayor || Math.abs(p.diferencia_t||0) > Math.abs(mayor.diferencia_t||0)) mayor = p; });
+  $("#alKpis").innerHTML =
+      `<div class="al-kpi ok"><div class="n">${kgF(cuad)}</div><div class="l">viajes cuadran${viajes?" ("+(cuad/viajes*100).toFixed(1)+"%)":""}</div></div>`
+    + `<div class="al-kpi ${pend?"mal":"ok"}"><div class="n">${pend}</div><div class="l">alertas sin revisar</div></div>`
+    + `<div class="al-kpi"><div class="n">${e.archivos_con_datos||0}</div><div class="l">Excel revisados</div></div>`
+    + (mayor && Math.abs(mayor.diferencia_t||0) >= 0.001
+        ? `<div class="al-kpi"><div class="n">Diferencia ${tF(Math.abs(mayor.diferencia_t))} t</div><div class="l">${esc(mayor.familia)}: báscula ${mayor.diferencia_t>0?"trae más":"trae menos"} que el Excel</div></div>`
+        : `<div class="al-kpi ok"><div class="n">0.000 t</div><div class="l">sin diferencia de toneladas</div></div>`);
+  const av = [];
+  if(hace > 90) av.push(`La última revisión fue hace ${hace>=1440?Math.round(hace/1440)+" día(s)":Math.round(hace/60)+" h"}. Revisa que la PC de báscula esté encendida.`);
+  if(e.recortadas) av.push(`Hay ${e.recortadas} alertas más que no se muestran (se enseñan las 300 más recientes).`);
+  if(e.sin_cuadre && e.sin_cuadre.length) av.push(`Estos Excel no cuadraron con ningún boleto y no se revisan: ${e.sin_cuadre.map(x=>esc(sinXlsx(x))).join(", ")}.`);
+  if(e.errores && e.errores.length) av.push(`No se pudieron leer: ${e.errores.map(esc).join(", ")}.`);
+  $("#alAvisos").innerHTML = av.map(x => `<div class="al-aviso">⚠ ${x}</div>`).join("");
+
+  /* tabla por Excel */
+  const filas = Object.values(pp).sort((a,b) => String(a.familia).localeCompare(String(b.familia)));
+  $("#alTabla").innerHTML = filas.map(p => {
+    const porArch = {};
+    (p.filas||[]).forEach(x => { const i = x.lastIndexOf("·"); const a = sinXlsx(x.slice(0,i)); (porArch[a] = porArch[a] || []).push(Number(x.slice(i+1))); });
+    const txtFilas = Object.keys(porArch).map(a => `${esc(a)}: <b>${porArch[a].sort((x,y)=>x-y).join(", ")}</b>`).join("<br>");
+    const txtSin = (p.sin_fila||[]).length ? `<div class="nota">+ boleto ${p.sin_fila.join(", ")} (no está en el Excel)</div>` : "";
+    const nPend = Object.keys(lista).filter(k => lista[k].familia===p.familia && !AL.rev[k]).length;
+    const dif = Number(p.diferencia_t||0);
+    return `<tr><td>${(p.archivos||[]).map(a=>esc(sinXlsx(a))).join("<br>")}</td><td>${esc(p.familia)}</td>
+      <td class="num">${kgF(p.viajes_excel)}</td><td class="num">${kgF(p.cuadran)}</td>
+      <td class="num">${tF(p.t_excel)}</td><td class="num">${tF(p.t_bascula)}</td>
+      <td class="num" style="color:${Math.abs(dif)>=0.001?"var(--critical)":"var(--good)"};font-weight:700">${dif>0?"+":""}${tF(dif)}</td>
+      <td>${txtFilas||(txtSin?"":"—")}${txtSin}</td>
+      <td>${nPend ? `<span class="pill" style="background:color-mix(in srgb,var(--critical) 14%,transparent);color:var(--critical)">${nPend} por revisar</span>` : `<span class="pill" style="background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)">✔ Cuadra</span>`}</td></tr>`;
+  }).join("") || '<tr><td colspan="9">Sin Excel con datos en el rango.</td></tr>';
+
+  /* chips */
+  const cuenta = {}; Object.keys(lista).forEach(k => { if(!AL.rev[k]) cuenta[lista[k].tipo] = (cuenta[lista[k].tipo]||0)+1; });
+  const nRev = Object.keys(lista).filter(k => AL.rev[k]).length;
+  const chips = [["todas","Todas ("+pend+")"]].concat(Object.keys(AL_TIPOS).filter(t=>cuenta[t]).map(t=>[t, AL_TIPOS[t]+" ("+cuenta[t]+")"])).concat([["rev","Revisadas ("+nRev+")"]]);
+  if(!chips.some(c=>c[0]===AL.f)) AL.f = "todas";
+  $("#alChips").innerHTML = chips.map(c => `<button class="al-chip${AL.f===c[0]?" on":""}" data-f="${c[0]}">${esc(c[1])}</button>`).join("");
+  $$("#alChips .al-chip").forEach(b => b.addEventListener("click", () => { AL.f = b.dataset.f; pintarAlertas(); }));
+
+  /* tarjetas */
+  const orden = Object.keys(lista).filter(k => AL.f==="rev" ? AL.rev[k] : (!AL.rev[k] && (AL.f==="todas" || lista[k].tipo===AL.f)))
+    .sort((a,b) => String(lista[b].fecha||"").localeCompare(String(lista[a].fecha||"")));
+  $("#alLista").innerHTML = orden.map(k => alTarjeta(k, lista[k])).join("") || '<p class="nota">Sin alertas en este filtro.</p>';
+  $$("#alLista [data-rev]").forEach(b => b.addEventListener("click", () => alMarcar(b.dataset.rev)));
+  $$("#alLista [data-desrev]").forEach(b => b.addEventListener("click", () => alDesmarcar(b.dataset.desrev)));
+  $$("#alLista [data-ver]").forEach(b => b.addEventListener("click", () => alVerDetalle(b.dataset.ver, b.dataset.fecha)));
+}
+function alTarjeta(k, a){
+  const x = a.excel, b = a.bascula, dif = new Set(a.dif||[]);
+  const m = (campo, txt) => dif.has(campo) ? `<span class="al-dif">${txt}</span>` : txt;
+  const fila = x ? `<span class="al-fila">Excel ${esc(sinXlsx(x.archivo))} · fila ${x.fila}</span>` : `<span class="al-fila sin">Sin fila: no está en el Excel</span>`;
+  const donde = alFecha(a.fecha) + (a.boleto ? " · boleto "+a.boleto : "");
+  const izq = x
+    ? `${esc(x.chofer||"—")}${x.camion?" · camión "+esc(x.camion):""}${x.lote?" · "+esc(x.lote):""}<br>${alFecha(x.fecha)} · ${m("bruto",kgF(x.bruto))} − ${m("tara",kgF(x.tara))} = ${kgF(x.neto)} kg`
+      + (x.neto_excel!=null ? `<br>El Excel dice neto <span class="al-dif">${kgF(x.neto_excel)}</span>` : "")
+    : "No aparece en el Excel";
+  const der = b
+    ? `Boleto <b>${b.boleto}</b> · ${esc(b.chofer||"—")}${b.placas?" · "+esc(b.placas):""}<br>${m("procedencia",esc(b.procedencia||b.grupo||"—"))}<br>${alFecha(b.fecha)}${alHora(b.entrada)} · ${m("bruto",kgF(b.bruto))} − ${m("tara",kgF(b.tara))} = ${m("neto",kgF(b.neto))} kg`
+    : "No hay boleto que cuadre";
+  const r = AL.rev[k];
+  const acc = r
+    ? `<button class="btn" data-desrev="${esc(k)}">Regresar a pendientes</button><span class="nota">Revisada por ${esc(r.por||"")} · ${alFecha(r.cuando)}${alHora(r.cuando)}${r.comentario?" · «"+esc(r.comentario)+"»":""}</span>`
+    : `<button class="btn pri" data-rev="${esc(k)}">✔ Marcar revisada</button>`
+      + (b ? `<button class="btn" data-ver="${b.boleto}" data-fecha="${esc(b.fecha||a.fecha)}">Ver boleto en Detalle</button>` : "");
+  return `<div class="al-card t-${esc(a.tipo)}${r?" rev":""}">
+    <div class="al-h"><span class="al-tipo">${esc(AL_TIPOS[a.tipo]||a.tipo)}</span>${fila}<span class="al-donde">${donde} · ${esc(a.familia||"")}</span></div>
+    <div class="al-cmp"><div class="al-lado"><b class="t">Excel</b>${izq}</div><div class="al-lado"><b class="t">Báscula</b>${der}</div></div>
+    ${a.pista ? `<div class="al-pista">💡 ${esc(a.pista)}</div>` : ""}
+    <div class="al-acc">${acc}</div></div>`;
+}
+async function alMarcar(k){
+  const c = prompt("Comentario (opcional). Ej.: «Se avisó a báscula», «Ana lo corrigió en el Excel»:", "");
+  if(c === null) return;
+  try{ await fb("PUT", "/alertas_revisadas/"+k, {por:AUTH.email, cuando:ahoraISO(), comentario:c.trim().slice(0,300)});
+       AL.rev[k] = {por:AUTH.email, cuando:ahoraISO(), comentario:c.trim()}; pintarAlertas(); }
+  catch(e){ alert(e.message); }
+}
+async function alDesmarcar(k){
+  try{ await fb("DELETE", "/alertas_revisadas/"+k); delete AL.rev[k]; pintarAlertas(); }
+  catch(e){ alert(e.message); }
+}
+function alVerDetalle(boleto, fecha){
+  PSEL.clear(); procBtnTxt(); $("#fProd").value=""; $("#fClase").value=""; $("#fCamp").value="";
+  $("#fTexto").value = boleto;
+  $("#fDesde").value = fecha; $("#fHasta").value = fecha; sincroFechas();
+  const t = document.querySelector('.tab[data-t="detalle"]'); if(t) t.click();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
 /* V19: nada se carga hasta que haya sesion y el correo este autorizado. */
 function arrancar(){
   if(arrancar.ya) return; arrancar.ya = true;
   cargar();
   setInterval(cargar, REFRESCO_MS);
   setInterval(sello, 20000);
+  if(AUTH.perm && AUTH.perm.alertas){ cargarAlertas(true); setInterval(()=>cargarAlertas(false), 5*60000); }
   setInterval(()=>{ if(!$("#p-hoy").classList.contains("oculto")){ pintarPulso(); pintarFeed(); } }, 15000);
 }
 (async ()=>{
