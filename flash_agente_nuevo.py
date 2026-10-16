@@ -58,6 +58,9 @@ V4.4 - Alertas: bascula contra los Excel de fletes
 V4.5 - Alerta de posible duplicado en bascula
   Mismo dia, mismo chofer o placas y casi el mismo bruto: se avisa en
   cuanto se pesa, sin esperar a que el viaje se capture en el Excel.
+
+V4.6 - Duplicado: el chofer tiene que ser el mismo (tolera dedazos) y
+  las placas no pueden ser distintas. "SN" ya no junta camiones.
 """
 
 import hashlib
@@ -73,7 +76,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.5"
+VERSION = "4.6"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -1927,11 +1930,23 @@ def cuadrar(excels, boletos, hoy_txt):
                                                      if que == "tara 0" and b.get("neto") else "")}
 
     # --- 5b) posible duplicado EN BASCULA (no depende del Excel)
-    # Mismo dia, mismo chofer o mismas placas y casi el mismo bruto. Un viaje
-    # de verdad casi nunca repite el bruto: varia cientos de kilos. Se avisa
-    # en cuanto se pesa, sin esperar a que capturen el Excel.
+    # Mismo dia, el MISMO chofer (aunque el nombre traiga un dedazo) y casi
+    # el mismo bruto. Las placas solo sirven para descartar: si las dos
+    # traen placas de verdad y son distintas, son camiones distintos. "SN",
+    # "S/N" y similares no cuentan como placas (las comparten muchos).
+    # V4.6: antes bastaban placas iguales, y "SN" junto camiones distintos.
     def _quien(b):
-        return (_sin_acentos(b.get("chofer")), _sin_acentos(b.get("placas")))
+        pl = re.sub(r"[^A-Z0-9]", "", _sin_acentos(b.get("placas")))
+        if pl in ("", "SN", "SINPLACAS", "SINPLACA", "NA", "0", "00", "000"):
+            pl = ""
+        return (_sin_acentos(b.get("chofer")), pl)
+    def _mismo_chofer(x, y):
+        if not x or not y:
+            return False
+        if x == y:
+            return True
+        import difflib
+        return difflib.SequenceMatcher(None, x, y).ratio() >= 0.88
     def _min(b):
         try:
             e = datetime.fromisoformat((b.get("entrada") or "")[:19])
@@ -1948,8 +1963,10 @@ def cuadrar(excels, boletos, hoy_txt):
         for i, a in enumerate(dia_l):
             for b in dia_l[i + 1:]:
                 qa, qb = _quien(a), _quien(b)
-                if not ((qa[0] and qa[0] == qb[0]) or (qa[1] and qa[1] == qb[1])):
+                if not _mismo_chofer(qa[0], qb[0]):
                     continue
+                if qa[1] and qb[1] and qa[1] != qb[1]:
+                    continue          # placas de verdad y distintas: otro camion
                 db = abs(int(a["bruto"]) - int(b["bruto"]))
                 ma, mb = _min(a), _min(b)
                 cerca = ma is not None and mb is not None and abs(mb - ma) <= CUADRE_DUP_MIN
@@ -1960,6 +1977,8 @@ def cuadrar(excels, boletos, hoy_txt):
                 if a["boleto"] in usados and b["boleto"] not in usados:
                     orig, dup = a, b
                 elif b["boleto"] in usados and a["boleto"] not in usados:
+                    orig, dup = b, a
+                elif _es_incompleto(a) and not _es_incompleto(b):
                     orig, dup = b, a
                 else:
                     orig, dup = a, b
@@ -1978,7 +1997,7 @@ def cuadrar(excels, boletos, hoy_txt):
                     "otro": lado_bascula(orig), "bascula": lado_bascula(dup),
                     "pista": ("Mismo %s, mismo día y bruto %s que el boleto %s%s. Posible pesada "
                               "duplicada: si es así, cancelarla en Revuelta.%s"
-                              % ("chofer" if qa[0] and qa[0] == qb[0] else "camión (placas)",
+                              % ("chofer" + (" y camión" if qa[1] and qa[1] == qb[1] else ""),
                                  "igual" if db == 0 else "casi igual (%d kg)" % db, orig["boleto"],
                                  " (ese sí está en el Excel)" if orig["boleto"] in usados else "",
                                  extra))}
