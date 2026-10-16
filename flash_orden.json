@@ -10,7 +10,7 @@
     "campanas": true,
     "cuadre": true,
     "cuadre_desde": "2026-09-01",
-    "cuadre_cada_min": 15
+    "cuadre_cada_min": 5
   },
   "excel": {
     "id": "2025-a",
