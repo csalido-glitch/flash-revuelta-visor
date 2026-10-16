@@ -1,5 +1,5 @@
 {
-  "_nota": "V4.4: alertas (cuadre de bascula contra los Excel de fletes de Dropbox, solo lectura). La carga 2025 ya hecha conserva su id y no se repite.",
+  "_nota": "V4.5: alertas (cuadre contra los Excel de fletes, solo lectura) + posible duplicado en bascula. La carga 2025 ya hecha conserva su id y no se repite.",
   "id": "carga-2025-completa-b",
   "carga_desde": "2025-01-01",
   "config": {
@@ -18,7 +18,7 @@
     "sha256": "42e68f5149ec0128623d351ff75720cb43e6c37ecab99dbbea9ef52a8785a585"
   },
   "actualizar": {
-    "sha256": "6c2092ceacbe9da9f6523f87026f35b683d786312f128ddb84c760bd21c22e2f",
+    "sha256": "7fb6a027beac3e7df22860226a049fa51ecaf59c25f9e3076708a2a453e69432",
     "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }

@@ -54,6 +54,10 @@ V4.4 - Alertas: bascula contra los Excel de fletes
   boletos ya enviados a Firebase. Sube solo el resultado a /alertas. Corre
   cuando cambia algun Excel o cada 15 min. Nunca escribe en un Excel. Si
   algo falla, el agente trabaja exactamente como la V4.3.
+
+V4.5 - Alerta de posible duplicado en bascula
+  Mismo dia, mismo chofer o placas y casi el mismo bruto: se avisa en
+  cuanto se pesa, sin esperar a que el viaje se capture en el Excel.
 """
 
 import hashlib
@@ -69,7 +73,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.4"
+VERSION = "4.5"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -1469,6 +1473,8 @@ ARCHIVO_CUADRE_CACHE = os.path.join(BASE, "cuadre_cache.json")
 CUADRE_TOL_KG = 300            # diferencia maxima para "peso distinto"
 CUADRE_DIAS = 2                # ventana de fechas para cuadrar
 CUADRE_MAX_ALERTAS = 300       # tope de alertas que se suben
+CUADRE_DUP_KG = 20             # duplicado: bruto casi igual (kg)
+CUADRE_DUP_MIN = 180           # duplicado: a menos de 3 horas
 _NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _NSR = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
@@ -1919,6 +1925,63 @@ def cuadrar(excels, boletos, hoy_txt):
             "bascula": lado_bascula(b),
             "pista": "Boleto con %s en báscula.%s" % (que, " Infla el total %s t." % _ton(b.get("neto"))
                                                      if que == "tara 0" and b.get("neto") else "")}
+
+    # --- 5b) posible duplicado EN BASCULA (no depende del Excel)
+    # Mismo dia, mismo chofer o mismas placas y casi el mismo bruto. Un viaje
+    # de verdad casi nunca repite el bruto: varia cientos de kilos. Se avisa
+    # en cuanto se pesa, sin esperar a que capturen el Excel.
+    def _quien(b):
+        return (_sin_acentos(b.get("chofer")), _sin_acentos(b.get("placas")))
+    def _min(b):
+        try:
+            e = datetime.fromisoformat((b.get("entrada") or "")[:19])
+            return e.hour * 60 + e.minute
+        except Exception:
+            return None
+    por_dia = {}
+    for b in boletos:
+        if b.get("bruto") and b["_f"]:
+            por_dia.setdefault(b["_f"], []).append(b)
+    vistos = set()
+    for dia_l in por_dia.values():
+        dia_l.sort(key=lambda x: (x.get("entrada") or "", x["boleto"]))
+        for i, a in enumerate(dia_l):
+            for b in dia_l[i + 1:]:
+                qa, qb = _quien(a), _quien(b)
+                if not ((qa[0] and qa[0] == qb[0]) or (qa[1] and qa[1] == qb[1])):
+                    continue
+                db = abs(int(a["bruto"]) - int(b["bruto"]))
+                ma, mb = _min(a), _min(b)
+                cerca = ma is not None and mb is not None and abs(mb - ma) <= CUADRE_DUP_MIN
+                igual = db == 0 and int(a.get("tara") or 0) == int(b.get("tara") or 0)
+                if not ((db <= CUADRE_DUP_KG and cerca) or igual):
+                    continue
+                # se marca el que NO esta en el Excel; si ninguno o los dos, el ultimo
+                if a["boleto"] in usados and b["boleto"] not in usados:
+                    orig, dup = a, b
+                elif b["boleto"] in usados and a["boleto"] not in usados:
+                    orig, dup = b, a
+                else:
+                    orig, dup = a, b
+                if dup["boleto"] in vistos:
+                    continue
+                vistos.add(dup["boleto"])
+                fam = grupo_de_fam(_familia(dup.get("grupo"))) or _familia(dup.get("grupo"))
+                extra = ""
+                if not dup.get("tara"):
+                    extra = " Además, este boleto trae tara 0."
+                alertas.pop("s-%s" % dup["boleto"], None)
+                alertas.pop("i-%s" % dup["boleto"], None)
+                alertas["u-%s" % dup["boleto"]] = {
+                    "tipo": "duplicado", "familia": fam, "fecha": dup["_f"], "boleto": dup["boleto"],
+                    "dif": ["bruto"] if db else [], "excel": None,
+                    "otro": lado_bascula(orig), "bascula": lado_bascula(dup),
+                    "pista": ("Mismo %s, mismo día y bruto %s que el boleto %s%s. Posible pesada "
+                              "duplicada: si es así, cancelarla en Revuelta.%s"
+                              % ("chofer" if qa[0] and qa[0] == qb[0] else "camión (placas)",
+                                 "igual" if db == 0 else "casi igual (%d kg)" % db, orig["boleto"],
+                                 " (ese sí está en el Excel)" if orig["boleto"] in usados else "",
+                                 extra))}
 
     # --- 6) resumen por procedencia
     por_fam = {}
