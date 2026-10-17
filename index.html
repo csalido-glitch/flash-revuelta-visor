@@ -605,6 +605,21 @@ body.con-login{overflow:hidden}
 .al-card.t-peso{border-left-color:var(--warning)}.al-card.t-procedencia{border-left-color:var(--s7)}
 .al-card.t-falta_bascula{border-left-color:var(--s1)}.al-card.t-incompleto{border-left-color:var(--muted)}.al-card.t-neto{border-left-color:var(--s2)}.al-card.t-duplicado{border-left-color:var(--critical)}
 .al-card.rev{opacity:.6}
+.al-card.t-tarja{border-left-color:var(--s5)}.al-card.t-folio{border-left-color:var(--s4)}.al-card.t-boleto{border-left-color:var(--s2)}
+/* V19.14 · tarja, pesada manual y boletos excluidos */
+.tag.man{background:color-mix(in srgb,var(--warning) 26%,transparent);color:var(--ink)}
+.tag.xls{background:color-mix(in srgb,var(--s1) 14%,transparent);color:var(--s1)}
+.tag.exc{background:color-mix(in srgb,var(--critical) 14%,transparent);color:var(--critical)}
+tr.excl td{color:var(--muted);text-decoration:line-through}
+tr.excl td .tag{text-decoration:none}
+.ex-forma{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:6px 0 4px}
+.ex-forma .campo input{width:170px;font-family:ui-monospace,Consolas,monospace;font-size:16px}
+.ex-hallado{border:1px solid var(--border);border-left:4px solid var(--critical);border-radius:10px;padding:12px 14px;margin:10px 0;background:var(--surface)}
+.ex-hallado .datos{font-size:13.5px;line-height:1.6}
+.ex-hallado .forma{margin-top:10px}
+.ex-hallado textarea{min-height:64px;font-family:inherit !important}
+.ex-efecto{font-size:12.5px;margin-top:8px;padding:6px 10px;border-radius:8px;background:color-mix(in srgb,var(--critical) 10%,transparent);color:var(--ink)}
+.ex-log div{padding:6px 0;border-top:1px solid var(--grid);font-size:12.5px}
 .al-h{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .al-tipo{font-weight:800}.al-donde{color:var(--ink-2);font-size:12.5px}
 .al-fila{display:inline-block;background:var(--navy);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700}
@@ -843,6 +858,7 @@ details summary{cursor:pointer}
         <div class="campo"><label for="fTexto">Chofer, placas o boleto</label><input type="search" id="fTexto" placeholder="Buscar…"></div>
         <div class="campo"><label>&nbsp;</label><button class="btn" id="bLimpiar">Limpiar</button></div>
         <div class="campo"><label>&nbsp;</label><button class="btn" id="bCsv">Descargar CSV</button></div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:9px"><label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" id="fExcl" style="width:16px;height:16px;accent-color:var(--navy)"> Mostrar excluidos <span class="nota" id="fExclN"></span></label></div>
       </div>
       <div class="tabla-caja">
         <table id="tabla">
@@ -955,6 +971,19 @@ details summary{cursor:pointer}
       <div class="al-chips" id="alChips"></div>
       <div id="alLista"></div>
     </div>
+    <div class="card" id="exCard">
+      <h2>Boletos excluidos del Flash</h2>
+      <p class="sub">Siguen en Revuelta y en la base de datos, pero no cuentan en Hoy, Histórico, Campañas ni Alertas. El agente recalcula ese día en su siguiente vuelta (máximo 3 minutos). La bitácora no se puede borrar.</p>
+      <div id="exForma" class="oculto">
+        <div class="ex-forma">
+          <div class="campo"><label for="exNum">Número de boleto a excluir</label><input id="exNum" inputmode="numeric" autocomplete="off" placeholder="Ej. 200271"></div>
+          <div class="campo"><label>&nbsp;</label><button class="btn" id="exBuscar">Buscar boleto</button></div>
+        </div>
+        <div id="exRes"></div>
+      </div>
+      <div class="tabla-caja" style="margin-top:10px"><table><thead><tr><th class="num">Boleto</th><th>Fecha</th><th>Procedencia</th><th class="num">Neto (kg)</th><th>Motivo</th><th>Comentario</th><th>Quién · cuándo</th><th></th></tr></thead><tbody id="exLista"></tbody></table></div>
+      <details style="margin-top:10px"><summary><b>Bitácora</b> <span class="nota" id="exBitN"></span></summary><div class="ex-log" id="exBit"></div></details>
+    </div>
   </section>
 
   <!-- ================= USUARIOS (V19, solo quien gestiona usuarios) ================= -->
@@ -962,7 +991,7 @@ details summary{cursor:pointer}
     <div class="card">
       <h2>Usuarios autorizados</h2>
       <p class="sub">Solo entran los correos de esta lista. Quitar a alguien le cierra el acceso al instante.</p>
-      <div class="tabla-caja"><table><thead><tr><th>Correo</th><th>Consulta</th><th>Gestiona usuarios</th><th>Gestiona campañas</th><th>Alertas</th><th>Alta</th><th></th></tr></thead><tbody id="usLista"></tbody></table></div>
+      <div class="tabla-caja"><table><thead><tr><th>Correo</th><th>Consulta</th><th>Gestiona usuarios</th><th>Gestiona campañas</th><th>Alertas</th><th>Excluir boletos</th><th>Alta</th><th></th></tr></thead><tbody id="usLista"></tbody></table></div>
     </div>
     <div class="card">
       <h2>Agregar usuario</h2>
@@ -972,7 +1001,8 @@ details summary{cursor:pointer}
         <div><div class="campo"><label>Permisos</label></div>
           <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usU"> Gestiona usuarios</label>
           <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usC"> Gestiona campañas</label>
-          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usA"> Alertas</label></div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usA"> Alertas</label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="usX"> Excluir boletos</label></div>
         <div><button class="btn pri" id="usAgregar">Agregar</button></div>
       </div>
       <div class="nota" id="usMsg"></div>
@@ -983,7 +1013,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.12 · 16-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.14 · 17-oct-2026)</span>
   </p>
 </div>
 
@@ -1498,7 +1528,7 @@ async function boletosPlanta(gk, desde){
     if(pack===null) throw new Error("no se pudieron leer los boletos");
     Object.keys(pack||{}).forEach(dia=>Object.values(pack[dia]||{}).forEach(r=>{
       if(!r) return; const b=Number(r.boleto);
-      if(!Number.isInteger(b) || vistos.has(b) || ex.has(b)) return;
+      if(!Number.isInteger(b) || vistos.has(b) || ex.has(b) || esExcl(r)) return;
       if(claveFb(r.grupo)!==gk || !productoEsPlanta(r.producto, r.grupo)) return;
       vistos.add(b); regs.push(Object.assign({__b:b, __f:String(r.entrada||dia).slice(0,10)}, r));
     }));
@@ -1632,17 +1662,19 @@ async function cargarUsuarios(){
     /* Las campanas son tema de operacion: quien no gestiona campanas no puede
        dar ese permiso ni quitar a quien lo tiene (las reglas tambien lo impiden). */
     const soyGC = !!(AUTH.perm && AUTH.perm.gestiona_campanas), protegido = u.gestiona_campanas && !soyGC;
-    const caja = (campo) => `<input type="checkbox" data-k="${esc(k)}" data-c="${campo}" ${u[campo] ? "checked" : ""} ${(yo || protegido || (campo==="gestiona_campanas" && !soyGC)) ? "disabled" : ""}>`;
+    /* V19.14: igual con «Excluir boletos»: solo quien lo tiene lo da o lo quita. */
+    const soyEX = !!(AUTH.perm && AUTH.perm.excluir), protegidoX = u.excluir && !soyEX;
+    const caja = (campo) => `<input type="checkbox" data-k="${esc(k)}" data-c="${campo}" ${u[campo] ? "checked" : ""} ${(yo || protegido || protegidoX || (campo==="gestiona_campanas" && !soyGC) || (campo==="excluir" && !soyEX)) ? "disabled" : ""}>`;
     return `<tr><td>${esc(u.correo)}${yo ? ' <span class="nota">(tú)</span>' : ""}</td><td>Sí</td>
-      <td>${caja("gestiona_usuarios")}</td><td>${caja("gestiona_campanas")}</td><td>${caja("alertas")}</td>
-      <td class="nota">${esc(u.alta||"")}</td><td>${(yo || protegido) ? "" : `<button class="btn" data-quitar="${esc(k)}">Quitar</button>`}</td></tr>`;
+      <td>${caja("gestiona_usuarios")}</td><td>${caja("gestiona_campanas")}</td><td>${caja("alertas")}</td><td>${caja("excluir")}</td>
+      <td class="nota">${esc(u.alta||"")}</td><td>${(yo || protegido || protegidoX) ? "" : `<button class="btn" data-quitar="${esc(k)}">Quitar</button>`}</td></tr>`;
   });
-  $("#usLista").innerHTML = filas.join("") || '<tr><td colspan="7">Sin usuarios.</td></tr>';
+  $("#usLista").innerHTML = filas.join("") || '<tr><td colspan="8">Sin usuarios.</td></tr>';
   $$("#usLista input[type=checkbox]").forEach(c => c.addEventListener("change", async () => {
     const k = c.dataset.k, cambios = {};
     cambios[`autorizados/${k}/${c.dataset.c}`] = c.checked;
     cambios[`autorizados_historial/${idHist()}`] = {cuando:ahoraISO(), quien:AUTH.email,
-      que:`${lista[k].correo}: ${({gestiona_usuarios:"gestiona usuarios", gestiona_campanas:"gestiona campañas", alertas:"alertas"})[c.dataset.c] || c.dataset.c} = ${c.checked ? "sí" : "no"}`};
+      que:`${lista[k].correo}: ${({gestiona_usuarios:"gestiona usuarios", gestiona_campanas:"gestiona campañas", alertas:"alertas", excluir:"excluir boletos"})[c.dataset.c] || c.dataset.c} = ${c.checked ? "sí" : "no"}`};
     try{ await fb("PATCH", "/", cambios); await cargarUsuarios(); }catch(e){ $("#usMsg").textContent = e.message; $("#usMsg").className = "nota bad"; }
   }));
   $$("#usLista [data-quitar]").forEach(b => b.addEventListener("click", async () => {
@@ -1653,6 +1685,7 @@ async function cargarUsuarios(){
   }));
   const h = Object.values(hist).sort((a,b) => String(b.cuando).localeCompare(String(a.cuando)));
   $("#usC").disabled = !(AUTH.perm && AUTH.perm.gestiona_campanas);
+  $("#usX").disabled = !(AUTH.perm && AUTH.perm.excluir);
   $("#usLog").innerHTML = h.map(x => `<div><span class="nota">${esc(fechaCorta2(new Date(x.cuando)))} ${hhmm(x.cuando)} · ${esc(x.quien)}</span><br>${esc(x.que)}</div>`).join("") || '<div class="nota">Sin cambios todavía.</div>';
 }
 $("#usAgregar").addEventListener("click", async () => {
@@ -1660,10 +1693,10 @@ $("#usAgregar").addEventListener("click", async () => {
   if(!correoValido(e)){ m.textContent = "Solo correos "+DOMINIO; m.className = "nota bad"; return; }
   const k = llaveCorreo(e), cambios = {};
   cambios[`autorizados/${k}`] = {correo:e, consulta:true, gestiona_usuarios:$("#usU").checked, gestiona_campanas:$("#usC").checked,
-                                 alertas:$("#usA").checked, alta:fechaCorta2(new Date()), alta_por:AUTH.email};
+                                 alertas:$("#usA").checked, excluir:$("#usX").checked, alta:fechaCorta2(new Date()), alta_por:AUTH.email};
   cambios[`autorizados_historial/${idHist()}`] = {cuando:ahoraISO(), quien:AUTH.email, que:`${e}: agregado`};
   try{ await fb("PATCH", "/", cambios); m.textContent = "Agregado. Avísale que entre con «Es mi primera vez»."; m.className = "nota ok";
-       $("#usCorreo").value = ""; $("#usU").checked = false; $("#usC").checked = false; $("#usA").checked = false; await cargarUsuarios(); }
+       $("#usCorreo").value = ""; $("#usU").checked = false; $("#usC").checked = false; $("#usA").checked = false; $("#usX").checked = false; await cargarUsuarios(); }
   catch(err){ m.textContent = err.message; m.className = "nota bad"; }
 });
 
@@ -2401,6 +2434,8 @@ function pintarPatio(){
     if(c.chofer) ident.push(esc(c.chofer));
     if(c.placas) ident.push("placas "+esc(c.placas));
     ident.push("boleto "+nBoleto(c.boleto));
+    if(c.tarja) ident.push("tarja "+esc(c.tarja));
+    if(c.pesada && c.pesada!=="N") ident.push('<span class="tag man">1ª pesada manual</span>');
     return `<div class="camion ${cls}">
       <div class="pl">${hhmm(c.entrada)}<small>${
         diaDe(c.entrada)===S.fecha ? "entró" : "entró "+fechaCorta(c.entrada)}</small></div>
@@ -2820,6 +2855,7 @@ async function cargarDetalle(){
   const packs = await Promise.all(dias.map(f=>traer("/boletos/"+f)));
   S.detalle=[];
   packs.forEach(p=>{ if(p) Object.values(p).forEach(r=>S.detalle.push(r)); });
+  await cargarTarjas();
   await campanasDet();
   llenarSelects(); pintarTabla(); cargando=false;
 }
@@ -2919,7 +2955,9 @@ function filtradas(lista){
   const pr=$("#fProd").value, cl=$("#fClase").value, cp=$("#fCamp").value;
   const t=($("#fTexto").value||"").trim().toLowerCase();
   const [cgk,cn]=(cp && cp!=="-") ? cp.split("|") : [null,null];
+  const verExcl = $("#fExcl") && $("#fExcl").checked;
   return (lista||S.detalle).filter(r=>{
+    if(!verExcl && esExcl(r)) return false;
     if(cp==="-" && r.lote!=null) return false;
     if(cgk && (claveFb(r.grupo)!==cgk || Number(r.lote)!==Number(cn))) return false;
     if(!procSelCoincide(r)) return false;
@@ -2943,6 +2981,8 @@ const DET_COLS = [
   {k:"chofer",          t:"Chofer"},
   {k:"procedencia",     t:"Procedencia", fija:true},
   {k:"producto",        t:"Producto",    fija:true},
+  {k:"tarja",           t:"Tarja",       fija:true},
+  {k:"pesada",          t:"Pesada",      fija:true},
   {k:"bruto",           t:"Bruto",                  num:true},
   {k:"tara",            t:"Tara",                   num:true},
   {k:"neto",            t:"Neto",        fija:true, num:true},
@@ -2960,7 +3000,9 @@ function cmpBoleto(a,b){ const x=llaveBoleto(a), y=llaveBoleto(b);
 function celdaDet(k, r, mineral, n){
   switch(k){
     case "n":       return `<td class="num" style="color:var(--muted)">${n}</td>`;
-    case "boleto":  return `<td class="num">${nBoleto(r.boleto)}${r.origen_dato==="excel"?' <span class="tag otro" title="Capturado a mano en Excel (Revuelta caído)'+(r.folio_excel?' · folio '+esc(r.folio_excel):'')+'">Excel</span>':''}${(r.alertas||[]).length?' <span class="alerta-dato">!</span>':''}</td>`;
+    case "tarja":   { const t=tarjaDe(r); return `<td>${t.v?esc(t.v)+(t.x?' <span class="tag xls" title="Folio tomado del Excel de fletes">Excel</span>':''):'<span style="color:var(--muted)">—</span>'}</td>`; }
+    case "pesada":  return `<td>${tagPesada(r.pesada)}</td>`;
+    case "boleto":  return `<td class="num">${nBoleto(r.boleto)}${esExcl(r)?' <span class="tag exc" title="'+esc(txtExcl(r))+'">Excluido</span>':''}${r.origen_dato==="excel"?' <span class="tag otro" title="Capturado a mano en Excel (Revuelta caído)'+(r.folio_excel?' · folio '+esc(r.folio_excel):'')+'">Excel</span>':''}${(r.alertas||[]).length?' <span class="alerta-dato">!</span>':''}</td>`;
     case "entrada": return `<td>${fechaCorta(r.entrada)} ${r.origen_dato==="excel"?"s/h":hhmm(r.entrada)}</td>`;
     case "salida":  return `<td>${hhmm(r.salida)}</td>`;
     case "minutos_bascula": return `<td class="num">${r.minutos_bascula==null?"—":r.minutos_bascula}</td>`;
@@ -3003,13 +3045,17 @@ function pintarTabla(){
     const n = S.numInv ? f.length-i : i+1;
     const mineral = productoEsPlanta(r.producto, r.grupo);
     const al = (r.alertas||[]).length ? ` title="${esc((r.alertas||[]).join(', '))}"` : "";
-    return `<tr${al}>` + cols.map(c=>celdaDet(c.k, r, mineral, n)).join("") + `</tr>`;
+    return `<tr${al}${esExcl(r)?' class="excl"':''}>` + cols.map(c=>celdaDet(c.k, r, mineral, n)).join("") + `</tr>`;
   }).join("") : `<tr><td colspan="${cols.length}"><div class="vacio">Nada con esos filtros.</div></td></tr>`;
 
-  const kgMin=f.filter(r=> productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
-  const kgOtr=f.filter(r=>!productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
-  $("#pieN").textContent = f.length+" "+(f.length===1?"pesada":"pesadas")
+  const nEx = f.filter(esExcl).length, fv = f.filter(r=>!esExcl(r));   // V19.14: los excluidos no suman
+  const kgMin=fv.filter(r=> productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
+  const kgOtr=fv.filter(r=>!productoEsPlanta(r.producto, r.grupo)).reduce((a,r)=>a+(r.neto||0),0);
+  $("#pieN").textContent = fv.length+" "+(fv.length===1?"pesada":"pesadas")
+    + (nEx? " (+"+nEx+" excluida"+(nEx>1?"s":"")+", no suma"+(nEx>1?"n":"")+")" : "")
     + (kgOtr? " · además "+nTon(kgOtr)+" t fuera del acarreo de mineral" : "");
+  const totEx = (S.detalle||[]).filter(esExcl).length;
+  $("#fExclN").textContent = totEx ? "("+totEx+")" : "";
   if(S.detCorte) $("#pieN").textContent += " · En pantalla hasta el "+fechaCorta(S.detCorte+"T12:00:00")+" (máx. 62 días); el CSV sí trae todo el rango";
   $("#pieT").textContent = nTon(kgMin)+" t de mineral";
 }
@@ -3019,6 +3065,7 @@ $("#fProc").addEventListener("change",()=>{ llenarCampanas(); pintarTabla(); });
 $("#fCamp").addEventListener("change",campanaElegida);
 
 $("#fTexto").addEventListener("input",pintarTabla);
+$("#fExcl").addEventListener("change",pintarTabla);
 ["#fDesde","#fHasta"].forEach(s=>$(s).addEventListener("change",cargarDetalle));
 /* ===================================================================
    CALENDARIO EN ESPAÑOL  (dd-mmm-aa)
@@ -3138,9 +3185,10 @@ $("#bCsv").addEventListener("click",async ()=>{
     b.disabled=false; pintarTabla();
   } else f=filtradas();
   f.sort((a,b)=>String(a.entrada||"").localeCompare(String(b.entrada||"")) || cmpBoleto(a.boleto,b.boleto));
-  f.forEach((r,i)=>{ r.__n=i+1; });
-  const cols=["__n","boleto","entrada","salida","minutos_bascula","placas","chofer","procedencia","grupo","producto","clase","bruto","tara","neto","lote","origen_dato","folio_excel","excel_archivo","excel_fila"];
-  const csv=[cols.map(c=>c==="__n"?"#":c).join(",")].concat(f.map(r=>cols.map(c=>{
+  f.forEach((r,i)=>{ r.__n=i+1; const t=tarjaDe(r); r.__tarja=t.v||""; r.__tarja_de=t.v?(t.x?"Excel":"Revuelta"):"";
+    r.__pesada=txtPesada(r.pesada); r.__excluido=esExcl(r)?txtExcl(r):""; });
+  const cols=["__n","boleto","entrada","salida","minutos_bascula","placas","chofer","procedencia","grupo","producto","clase","__tarja","__tarja_de","__pesada","bruto","tara","neto","lote","__excluido","origen_dato","folio_excel","excel_archivo","excel_fila"];
+  const csv=[cols.map(c=>({__n:"#",__tarja:"tarja",__tarja_de:"tarja_de",__pesada:"pesada",__excluido:"excluido"})[c]||c).join(",")].concat(f.map(r=>cols.map(c=>{
     const v=r[c]==null?"":String(r[c]); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
   }).join(","))).join("\n");
   const a=document.createElement("a");
@@ -3195,7 +3243,7 @@ async function cargar(){
   S.ultimoDia = previos.length ? previos[previos.length-1] : null;
 
   const pack = await traer("/boletos/"+S.fecha);
-  S.dia = pack ? Object.values(pack) : [];
+  S.dia = pack ? Object.values(pack).filter(r => r && !esExcl(r)) : [];   // V19.14: los excluidos no cuentan
 
   /* El Detalle es otra cosa: ahi se anda buscando, no vigilando. Si hoy
      viene vacio arranca en el ultimo dia con movimiento para que no abra
@@ -3225,7 +3273,10 @@ const AL_TIPOS = {
   peso:          "Peso distinto",
   falta_bascula: "En Excel, no en báscula",
   incompleto:    "Boleto incompleto",
-  neto:          "Neto mal calculado en el Excel"
+  neto:          "Neto mal calculado en el Excel",
+  tarja:         "Posible tarja usada dos veces",
+  folio:         "Folio de tarja distinto",
+  boleto:        "Boleto distinto en el Excel"
 };
 const kgF = n => (n==null || isNaN(n)) ? "—" : Number(n).toLocaleString("es-MX");
 const tF  = n => (n==null || isNaN(n)) ? "—" : Number(n).toLocaleString("es-MX",{minimumFractionDigits:3,maximumFractionDigits:3});
@@ -3319,18 +3370,19 @@ function pintarAlertas(){
 function alTarjeta(k, a){
   const x = a.excel, b = a.bascula, dif = new Set(a.dif||[]);
   const m = (campo, txt) => dif.has(campo) ? `<span class="al-dif">${txt}</span>` : txt;
-  const fila = a.tipo==="duplicado" ? `<span class="al-fila sin">Báscula</span>` : x ? `<span class="al-fila">Excel ${esc(sinXlsx(x.archivo))} · fila ${x.fila}</span>` : `<span class="al-fila sin">Sin fila: no está en el Excel</span>`;
+  const fila = (a.tipo==="duplicado" || a.tipo==="tarja") ? `<span class="al-fila sin">Báscula</span>` : x ? `<span class="al-fila">Excel ${esc(sinXlsx(x.archivo))} · fila ${x.fila}</span>` : `<span class="al-fila sin">Sin fila: no está en el Excel</span>`;
   const donde = alFecha(a.fecha) + (a.boleto ? " · boleto "+a.boleto : "");
   const o = a.otro;
   const izqT = o ? "Báscula · el otro boleto" : "Excel";
   const izq = o
-    ? `Boleto <b>${o.boleto}</b> · ${esc(o.chofer||"—")}${o.placas?" · "+esc(o.placas):""}<br>${esc(o.procedencia||o.grupo||"—")}<br>${alFecha(o.fecha)}${alHora(o.entrada)} · ${kgF(o.bruto)} − ${kgF(o.tara)} = ${kgF(o.neto)} kg`
+    ? `Boleto <b>${o.boleto}</b> · ${esc(o.chofer||"—")}${o.placas?" · "+esc(o.placas):""}<br>${esc(o.procedencia||o.grupo||"—")}<br>${alFecha(o.fecha)}${alHora(o.entrada)} · ${kgF(o.bruto)} − ${kgF(o.tara)} = ${kgF(o.neto)} kg${alTP(o, dif)}`
     : x
     ? `${esc(x.chofer||"—")}${x.camion?" · camión "+esc(x.camion):""}${x.lote?" · "+esc(x.lote):""}<br>${alFecha(x.fecha)} · ${m("bruto",kgF(x.bruto))} − ${m("tara",kgF(x.tara))} = ${kgF(x.neto)} kg`
       + (x.neto_excel!=null ? `<br>El Excel dice neto <span class="al-dif">${kgF(x.neto_excel)}</span>` : "")
+      + (x.folio || x.boleto_excel ? `<br>${x.folio?"Tarja "+m("folio",esc(x.folio)):""}${x.folio&&x.boleto_excel?" · ":""}${x.boleto_excel?"Boleto en Excel "+m("boleto",esc(x.boleto_excel)):""}` : "")
     : "No aparece en el Excel";
   const der = b
-    ? `Boleto <b>${b.boleto}</b> · ${esc(b.chofer||"—")}${b.placas?" · "+esc(b.placas):""}<br>${m("procedencia",esc(b.procedencia||b.grupo||"—"))}<br>${alFecha(b.fecha)}${alHora(b.entrada)} · ${m("bruto",kgF(b.bruto))} − ${m("tara",kgF(b.tara))} = ${m("neto",kgF(b.neto))} kg`
+    ? `Boleto <b>${b.boleto}</b> · ${esc(b.chofer||"—")}${b.placas?" · "+esc(b.placas):""}<br>${m("procedencia",esc(b.procedencia||b.grupo||"—"))}<br>${alFecha(b.fecha)}${alHora(b.entrada)} · ${m("bruto",kgF(b.bruto))} − ${m("tara",kgF(b.tara))} = ${m("neto",kgF(b.neto))} kg${alTP(b, dif)}`
     : "No hay boleto que cuadre";
   const r = AL.rev[k];
   const acc = r
@@ -3339,10 +3391,143 @@ function alTarjeta(k, a){
       + (b ? `<button class="btn" data-ver="${b.boleto}" data-fecha="${esc(b.fecha||a.fecha)}">Ver boleto en Detalle</button>` : "");
   return `<div class="al-card t-${esc(a.tipo)}${r?" rev":""}">
     <div class="al-h"><span class="al-tipo">${esc(AL_TIPOS[a.tipo]||a.tipo)}</span>${fila}<span class="al-donde">${donde} · ${esc(a.familia||"")}</span></div>
-    <div class="al-cmp"><div class="al-lado"><b class="t">${izqT}</b>${izq}</div><div class="al-lado"><b class="t">Báscula${o?" · posible duplicado":""}</b>${der}</div></div>
+    <div class="al-cmp"><div class="al-lado"><b class="t">${izqT}</b>${izq}</div><div class="al-lado"><b class="t">Báscula${o?(a.tipo==="tarja"?" · misma tarja":" · posible duplicado"):""}</b>${der}</div></div>
     ${a.pista ? `<div class="al-pista">💡 ${esc(a.pista)}</div>` : ""}
+    ${(a.tipo==="duplicado" || a.tipo==="tarja") && a.boleto && AUTH.perm && AUTH.perm.excluir && !EXC.lista[a.boleto]
+      ? `<div class="nota" style="margin-top:6px">Si no fue un viaje real, escribe el <b>${a.boleto}</b> en «Boletos excluidos del Flash», abajo.</div>` : ""}
+    ${a.boleto && EXC.lista[a.boleto] ? `<div class="nota" style="margin-top:6px"><span class="tag exc">Excluido</span> ${esc(txtExcl({boleto:a.boleto}))}. La alerta se va en la siguiente revisión.</div>` : ""}
     <div class="al-acc">${acc}</div></div>`;
 }
+/* ===================================================================
+   V19.14 · TARJA, PESADA MANUAL Y BOLETOS EXCLUIDOS
+   Excluir: el boleto se ESCRIBE a mano (nada de botones en Detalle), se
+   ven sus datos, motivo y comentario obligatorio, y se confirma. Va a
+   /excluidos/{boleto} + un renglon en /excluidos_bitacora. Revuelta no se
+   toca. El agente (V4.7) lo marca y recalcula ese dia.
+   =================================================================== */
+const EXC = { lista:{}, bit:{}, cargado:false, hallado:null };
+const EX_MOTIVOS = ["Duplicado", "Prueba", "Pesada errónea", "Otros"];
+const TX = { datos:{}, t:0 };
+/* Si se pudo leer la lista (permiso Alertas), manda la lista: asi una
+   restauracion se ve al instante. Si no, la marca que pone el agente. */
+function esExcl(r){ if(!r) return false; return EXC.cargado ? !!EXC.lista[r.boleto] : !!r.excluido; }
+function txtExcl(r){ const e = (EXC.cargado ? EXC.lista[r.boleto] : r.excluido) || r.excluido || {};
+  return [e.motivo, e.comentario ? "«"+e.comentario+"»" : "", e.por, e.cuando ? alFecha(e.cuando) : ""].filter(Boolean).join(" · "); }
+function tarjaDe(r){ if(r && r.tarja) return {v:r.tarja, x:false};
+  const t = r && TX.datos[String(r.boleto)]; return t ? {v:t, x:true} : {v:null, x:false}; }
+function txtPesada(p){ return !p ? "" : p==="N" ? "Normal" : p==="M1" ? "Manual (1ª)" : p==="M2" ? "Manual (2ª)" : "Manual (1ª y 2ª)"; }
+function tagPesada(p){ if(!p) return '<span style="color:var(--muted)">—</span>';
+  return p==="N" ? '<span class="tag otro">Normal</span>' : `<span class="tag man" title="${esc(txtPesada(p))}: peso tecleado a mano">Manual</span>`; }
+function alTP(b, dif){ const t = b.tarja ? "Tarja "+(dif && dif.has("folio") || dif && dif.has("tarja") ? `<span class="al-dif">${esc(b.tarja)}</span>` : esc(b.tarja)) : "";
+  const p = b.pesada && b.pesada!=="N" ? '<span class="tag man">Manual</span>' : "";
+  return (t||p) ? "<br>"+[t,p].filter(Boolean).join(" · ") : ""; }
+async function cargarTarjas(){
+  if(Date.now() - TX.t < 5*60000) return;
+  const t = await traer("/tarjas_excel"); if(t){ TX.datos = t; TX.t = Date.now(); }
+}
+async function cargarExcluidos(){
+  if(!(AUTH.perm && AUTH.perm.alertas)) return;
+  const [l, b] = await Promise.all([traer("/excluidos"), traer("/excluidos_bitacora")]);
+  if(l === null && b === null && EXC.cargado) return;     // sin red: se queda lo que habia
+  EXC.lista = l || {}; EXC.bit = b || {}; EXC.cargado = true;
+  pintarExcluidos();
+}
+function pintarExcluidos(){
+  const puede = !!(AUTH.perm && AUTH.perm.excluir);
+  $("#exForma").classList.toggle("oculto", !puede);
+  const ks = Object.keys(EXC.lista).sort((a,b)=>String((EXC.lista[b]||{}).cuando).localeCompare(String((EXC.lista[a]||{}).cuando)));
+  $("#exLista").innerHTML = ks.map(k => { const e = EXC.lista[k]||{};
+    return `<tr><td class="num"><b>${esc(k)}</b></td><td>${e.fecha?alFecha(e.fecha):"—"}</td><td>${esc(e.procedencia||"—")}</td>
+      <td class="num">${kgF(e.neto)}</td><td>${esc(e.motivo||"")}</td><td>${esc(e.comentario||"")}</td>
+      <td class="nota" title="${esc(e.por||"")}">${esc(String(e.por||"").split("@")[0])}<br>${e.cuando?alFecha(e.cuando)+alHora(e.cuando):""}</td>
+      <td>${puede?`<button class="btn" data-restaurar="${esc(k)}">↺ Restaurar</button>`:""}</td></tr>`; }).join("")
+    || '<tr><td colspan="8" class="nota">Ningún boleto excluido.</td></tr>';
+  $$("#exLista [data-restaurar]").forEach(b => b.addEventListener("click", () => exRestaurar(b.dataset.restaurar)));
+  const h = Object.values(EXC.bit).sort((a,b)=>String(b.cuando).localeCompare(String(a.cuando)));
+  $("#exBitN").textContent = "("+h.length+" movimiento"+(h.length===1?"":"s")+")";
+  $("#exBit").innerHTML = h.map(x => `<div><span class="nota">${alFecha(x.cuando)}${alHora(x.cuando)} · ${esc(x.por||"")}</span><br>
+      <b>${x.accion==="restaurar"?"Restauró":"Excluyó"} el ${esc(x.boleto)}</b>${x.motivo?" · "+esc(x.motivo):""} · «${esc(x.comentario||"")}»</div>`).join("")
+    || '<div class="nota">Sin movimientos todavía.</div>';
+}
+/* El boleto se busca dia por dia hacia atras (cada consulta es chiquita).
+   Primero 45 dias de golpe; si no sale, hasta un año. */
+async function exBuscarBoleto(n){
+  const hoy = new Date();
+  for(let base=0; base<400; base+=31){
+    const dias = [];
+    for(let i=base; i<base+31; i++){ const d=new Date(hoy); d.setDate(d.getDate()-i); dias.push(isoDe(d)); }
+    $("#exRes").innerHTML = `<p class="nota">Buscando el boleto ${n}… (hasta el ${alFecha(dias[dias.length-1])})</p>`;
+    const res = await Promise.all(dias.map(f => traer("/boletos/"+f+"/"+n)));
+    const i = res.findIndex(Boolean);
+    if(i >= 0) return Object.assign({__dia:dias[i]}, res[i]);
+  }
+  return null;
+}
+$("#exNum").addEventListener("keydown", e => { if(e.key==="Enter") $("#exBuscar").click(); });
+$("#exNum").addEventListener("input", () => { EXC.hallado = null; $("#exRes").innerHTML = ""; });
+$("#exBuscar").addEventListener("click", async () => {
+  const v = ($("#exNum").value||"").trim(), out = $("#exRes"); EXC.hallado = null;
+  if(!/^\d{4,7}$/.test(v)){ out.innerHTML = '<p class="nota bad">Escribe solo el número del boleto (ej. 200271).</p>'; return; }
+  const n = Number(v);
+  if(EXC.lista[n]){ out.innerHTML = `<p class="nota bad">El boleto ${n} ya está excluido. Para regresarlo usa «Restaurar» en la lista.</p>`; return; }
+  $("#exBuscar").disabled = true;
+  const r = await exBuscarBoleto(n);
+  $("#exBuscar").disabled = false;
+  if(String($("#exNum").value||"").trim() !== v) return;      // cambiaron el numero mientras buscaba
+  if(!r){ out.innerHTML = `<p class="nota bad">No encontré el boleto ${n} en el último año. Revisa el número.</p>`; return; }
+  if(r.abierto){ out.innerHTML = `<p class="nota bad">El boleto ${n} sigue abierto (en patio). Se puede excluir cuando cierre.</p>`; return; }
+  EXC.hallado = r;
+  const t = tarjaDe(r);
+  out.innerHTML = `<div class="ex-hallado">
+    <div class="datos"><b style="font-size:16px">Boleto ${n}</b> · ${alFecha(r.__dia)} ${hhmm(r.entrada)}<br>
+      ${esc(r.procedencia||"—")} · ${esc(r.producto||"—")}<br>
+      ${esc(r.chofer||"—")}${r.placas?" · placas "+esc(r.placas):""}${t.v?" · tarja "+esc(t.v):""} · pesada ${esc(txtPesada(r.pesada)||"—")}<br>
+      ${kgF(r.bruto)} − ${kgF(r.tara)} = <b>${kgF(r.neto)} kg</b>${r.lote!=null?" · campaña "+r.lote:""}</div>
+    <div class="forma">
+      <div class="campo"><label for="exMot">Motivo</label><select id="exMot">${EX_MOTIVOS.map(x=>`<option>${x}</option>`).join("")}</select></div>
+      <div class="campo oculto" id="exOtroC"><label for="exOtro">¿Cuál motivo?</label><input id="exOtro" maxlength="60" placeholder="Escribe el motivo"></div>
+      <div class="campo" style="grid-column:1/-1"><label for="exCom">Comentario (obligatorio)</label><textarea id="exCom" maxlength="300" placeholder="Ej. Pesada repetida; autorizado por Ana y auditoría"></textarea></div>
+    </div>
+    <div class="ex-efecto">Se restan <b>${tF((r.neto||0)/1000)} t</b> de ${esc(r.procedencia||"esa procedencia")} el ${alFecha(r.__dia)} en Hoy, Histórico y Campañas. En Revuelta no cambia nada.</div>
+    <div class="al-acc"><button class="btn pri" id="exSi" disabled>Excluir el ${n}</button><button class="btn" id="exNo">Cancelar</button><span class="nota bad" id="exMsg"></span></div>
+  </div>`;
+  const valida = () => { const mo = $("#exMot").value==="Otros" ? ($("#exOtro").value||"").trim() : $("#exMot").value;
+    $("#exSi").disabled = !(mo.length >= 3 && ($("#exCom").value||"").trim().length >= 5); };
+  $("#exMot").addEventListener("change", () => { $("#exOtroC").classList.toggle("oculto", $("#exMot").value!=="Otros"); valida(); });
+  $("#exOtro").addEventListener("input", valida); $("#exCom").addEventListener("input", valida);
+  $("#exNo").addEventListener("click", () => { EXC.hallado = null; out.innerHTML = ""; $("#exNum").value = ""; });
+  $("#exSi").addEventListener("click", exExcluir);
+});
+async function exExcluir(){
+  const r = EXC.hallado; if(!r) return;
+  const n = Number(r.boleto), mo = $("#exMot").value==="Otros" ? ($("#exOtro").value||"").trim() : $("#exMot").value;
+  const com = ($("#exCom").value||"").trim();
+  if(mo.length < 3 || com.length < 5) return;
+  if(!confirm(`¿Excluir del Flash el boleto ${n} (${tF((r.neto||0)/1000)} t de ${r.procedencia||"?"}, ${alFecha(r.__dia)})?\n\nEn Revuelta no cambia nada y se puede restaurar.`)) return;
+  const cuando = ahoraISO(), cambios = {};
+  cambios[`excluidos/${n}`] = {boleto:n, fecha:r.__dia, procedencia:r.procedencia||null, grupo:r.grupo||null,
+                               neto:r.neto==null?null:r.neto, motivo:mo, comentario:com, por:AUTH.email, cuando};
+  cambios[`excluidos_bitacora/${idHist()}`] = {accion:"excluir", boleto:n, fecha:r.__dia, motivo:mo, comentario:com, por:AUTH.email, cuando};
+  $("#exSi").disabled = true;
+  try{ await fb("PATCH", "/", cambios); }
+  catch(e){ $("#exMsg").textContent = e.message; $("#exSi").disabled = false; return; }
+  EXC.hallado = null; $("#exNum").value = "";
+  $("#exRes").innerHTML = `<p class="nota ok">✔ Boleto ${n} excluido. El agente recalcula el ${alFecha(r.__dia)} en su siguiente vuelta (máx. 3 min).</p>`;
+  await cargarExcluidos(); pintarAlertas(); cargar();
+}
+async function exRestaurar(k){
+  const e = EXC.lista[k]; if(!e) return;
+  const c = prompt(`Restaurar el boleto ${k} al Flash (vuelve a sumar ${tF((e.neto||0)/1000)} t a ${e.procedencia||"?"}).\n\nComentario (obligatorio):`, "");
+  if(c === null) return;
+  if(c.trim().length < 5){ alert("El comentario es obligatorio (mínimo 5 letras)."); return; }
+  const cuando = ahoraISO(), cambios = {};
+  cambios[`excluidos/${k}`] = null;
+  cambios[`excluidos_bitacora/${idHist()}`] = {accion:"restaurar", boleto:Number(k), fecha:e.fecha||null, comentario:c.trim().slice(0,300), por:AUTH.email, cuando};
+  try{ await fb("PATCH", "/", cambios); }catch(err){ alert(err.message); return; }
+  $("#exRes").innerHTML = `<p class="nota ok">↺ Boleto ${esc(k)} restaurado. Vuelve a contar cuando el agente recalcule el ${e.fecha?alFecha(e.fecha):"día"} (máx. 3 min).</p>`;
+  await cargarExcluidos(); pintarAlertas(); cargar();
+}
+
 async function alMarcar(k){
   const c = prompt("Comentario (opcional). Ej.: «Se avisó a báscula», «Ana lo corrigió en el Excel»:", "");
   if(c === null) return;
@@ -3368,7 +3553,8 @@ function arrancar(){
   cargar();
   setInterval(cargar, REFRESCO_MS);
   setInterval(sello, 20000);
-  if(AUTH.perm && AUTH.perm.alertas){ cargarAlertas(true); setInterval(()=>cargarAlertas(false), 5*60000); }
+  if(AUTH.perm && AUTH.perm.alertas){ cargarAlertas(true); setInterval(()=>cargarAlertas(false), 5*60000);
+    cargarExcluidos().then(()=>{ cargar(); }); setInterval(cargarExcluidos, 5*60000); }
   setInterval(()=>{ if(!$("#p-hoy").classList.contains("oculto")){ pintarPulso(); pintarFeed(); } }, 15000);
 }
 (async ()=>{
