@@ -61,6 +61,18 @@ V4.5 - Alerta de posible duplicado en bascula
 
 V4.6 - Duplicado: el chofer tiene que ser el mismo (tolera dedazos) y
   las placas no pueden ser distintas. "SN" ya no junta camiones.
+
+V4.7 - Tarja, pesada manual y boletos excluidos
+  - Folio de la tarja: llega de Revuelta en el "Dato adicional" (Adicion).
+    Si no viene, se toma el FOLIO TARJA del Excel (/tarjas_excel).
+  - Pesada manual: Bascula_PP / Bascula_SP = "M" -> el boleto lleva "pesada".
+  - Los Excel ya traen el boleto (FOLIO REV): se cuadra directo por numero.
+  - Alertas nuevas: tarja usada dos veces, folio de tarja distinto y
+    boleto distinto en el Excel.
+  - Boletos excluidos del Flash (/excluidos, los pone el visor con permiso
+    especial y comentario). Siguen en Revuelta y en /boletos marcados, pero
+    no cuentan en el resumen, en las campanas ni en el cuadre. Cuando
+    alguien excluye o restaura, el agente recalcula solo ese dia.
 """
 
 import hashlib
@@ -76,7 +88,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.6"
+VERSION = "4.7"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -228,6 +240,10 @@ REGLAS = [
     ("tara",        ["tarauprim", "tarounidadprim", "tara"]),
     ("neto",        ["netoupr", "netouprim", "netounidadprim", "pesoneto", "neto"]),
     ("peso",        ["pesopp", "pesounidadprim", "pesouprim", "peso"]),
+    # V4.7: el "Dato adicional" de Revuelta se usa para el folio de la tarja
+    ("tarja",       ["adicion", "adicional", "datoadicional", "foliotarja", "tarja"]),
+    ("bascula_pp",  ["basculapp", "bascula1a"]),
+    ("bascula_sp",  ["basculasp", "bascula2a"]),
 ]
 
 def mapear(registro):
@@ -364,6 +380,18 @@ def normalizar(registro, abierto=False):
 
     procedencia = limpiar_texto(r.get("procedencia"))
 
+    # V4.7: folio de la tarja (solo el numero, como viene impreso) y si la
+    # pesada se tecleo a mano ("M") en vez de leerse de la bascula.
+    tarja = limpiar_texto(r.get("tarja"))
+    if tarja and re.fullmatch(r"[0-9 \-]+", tarja):
+        tarja = re.sub(r"\D", "", tarja) or None
+    pp = (limpiar_texto(r.get("bascula_pp")) or "").upper()
+    sp = (limpiar_texto(r.get("bascula_sp")) or "").upper()
+    pesada = None
+    if pp or sp:
+        m = ("1" if pp == "M" else "") + ("2" if sp == "M" else "")
+        pesada = ("M" + m) if m else "N"
+
     reg = {
         "boleto": int(boleto),
         "entrada": entrada,
@@ -376,6 +404,8 @@ def normalizar(registro, abierto=False):
         "procedencia": procedencia,
         "grupo": agrupar(procedencia),
         "producto": limpiar_texto(r.get("producto")),
+        "tarja": tarja,
+        "pesada": pesada,
         "bruto": bruto,
         "tara": tara,
         "neto": neto,
@@ -1102,6 +1132,88 @@ def es_planta(producto):
 
 
 # --------------------------------------------------------------------------
+# V4.7 - Boletos excluidos del Flash
+# --------------------------------------------------------------------------
+# Los pone el visor en /excluidos/{boleto} (permiso especial, con motivo y
+# comentario). El agente solo los LEE. Un boleto excluido se sigue mandando
+# a /boletos, marcado con "excluido", pero no cuenta en el resumen, en las
+# campanas ni en el cuadre. En Revuelta no cambia nada.
+ARCHIVO_EXCL = os.path.join(BASE, "excluidos_vistos.json")
+EXCL = {}                 # boleto (int) -> {motivo, comentario, por, cuando, fecha}
+EXCL_CAMPOS = ("motivo", "comentario", "por", "cuando", "fecha")
+
+
+def _fb_leer(ruta):
+    """Como firebase_get, pero distingue 'no existe' (True, None) de
+    'no se pudo leer' (False, None)."""
+    url = "%s/%s.json" % (CFG["firebase_url"].rstrip("/"), ruta.strip("/"))
+    if CFG.get("firebase_auth"):
+        url += "?auth=" + CFG["firebase_auth"]
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=CFG["timeout_firebase"]) as resp:
+            return True, json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        log("No se pudo leer %s de Firebase: %s" % (ruta, e), "WARN")
+        return False, None
+
+
+def _excl_previos():
+    try:
+        with open(ARCHIVO_EXCL, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return {int(k): v for k, v in (d.get("boletos") or {}).items()}
+    except Exception:
+        return {}
+
+
+def guardar_excluidos_vistos():
+    try:
+        tmp = ARCHIVO_EXCL + ".nuevo"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"boletos": {str(k): v for k, v in EXCL.items()},
+                       "guardado": datetime.now().isoformat(timespec="seconds")},
+                      f, ensure_ascii=False)
+        os.replace(tmp, ARCHIVO_EXCL)
+    except Exception as e:
+        log("No se pudo guardar excluidos_vistos.json (%s)" % e, "WARN")
+
+
+def cargar_excluidos():
+    """Lee /excluidos. Devuelve {fecha: [boletos]} con los dias que hay que
+    recalcular porque alguien excluyo o restauro un boleto desde la ultima
+    vez. Si Firebase no responde, se usa lo ultimo que se vio y no se
+    recalcula nada."""
+    global EXCL
+    previo = _excl_previos()
+    ok, datos = _fb_leer("excluidos")
+    if not ok:
+        EXCL = previo
+        return None
+    actual = {}
+    for k, v in (_como_dict(datos) or {}).items():
+        b = _entero(k)
+        if b is None or not isinstance(v, dict):
+            continue
+        actual[b] = {c: v.get(c) for c in EXCL_CAMPOS if v.get(c) is not None}
+    EXCL = actual
+    cambios = {}
+    for b in set(actual) | set(previo):
+        if (b in actual) == (b in previo):
+            continue
+        f = str((actual.get(b) or previo.get(b) or {}).get("fecha") or "")[:10]
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", f):
+            log("Excluido %s sin fecha valida; no se puede recalcular su dia." % b, "WARN")
+            f = ""
+        cambios.setdefault(f, []).append(b)
+    return cambios
+
+
+def excluido(boleto):
+    return EXCL.get(_entero(boleto))
+
+
+# --------------------------------------------------------------------------
 # Campanas (lotes)
 # --------------------------------------------------------------------------
 # Una campana no guarda sus camiones: guarda DONDE EMPIEZA. El lote 24 de
@@ -1213,6 +1325,8 @@ def lote_de(grupo, entrada, boleto=None):
         return None
     if boleto is not None and _entero(boleto) in EXCLUIDOS.get(gk, ()):
         return None   # V4.2: excluido por el gestor (duplicado, tara 0, no es del flete...)
+    if boleto is not None and _entero(boleto) in EXCL:
+        return None   # V4.7: excluido del Flash
     for lote in filas:
         if _pertenece(lote, entrada, boleto):
             return lote["numero"]
@@ -1478,6 +1592,12 @@ CUADRE_DIAS = 2                # ventana de fechas para cuadrar
 CUADRE_MAX_ALERTAS = 300       # tope de alertas que se suben
 CUADRE_DUP_KG = 20             # duplicado: bruto casi igual (kg)
 CUADRE_DUP_MIN = 180           # duplicado: a menos de 3 horas
+CUADRE_TARJA_DIAS = 10         # V4.7: tarja repetida, a menos de 10 dias
+#   Estimado con los Excel de 2026: en El Realito (40 viajes al dia, blocks
+#   del 0001 al 5000 en paralelo) un folio se repite como minimo a los 21
+#   dias; en las demas procedencias no se repite en menos de 77 dias. Con
+#   10 dias y ademas un dato que amarre (chofer, placas o bruto) no se
+#   espera ninguna alerta falsa.
 _NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _NSR = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
@@ -1639,11 +1759,33 @@ def _encabezado(filas):
                 col["procedencia"] = i
             elif "CONTENIDO" in t and "contenido" not in col:
                 col["contenido"] = i
+            elif ("REV" in t or "BOLETO" in t) and "boleto" not in col:
+                col["boleto"] = i          # V4.7: "FOLIO REV" = numero de boleto de Revuelta
             elif "FOLIO" in t and "folio" not in col:
-                col["folio"] = i
+                col["folio"] = i           # "FOLIO" o "FOLIO TARJA" = folio de la tarja
         if "fecha" in col and "bruto" in col and "tara" in col:
             return num, col
     return None, None
+
+
+def _folio(v):
+    """Folio de tarja como texto de 4 digitos ('0889'). None si no es un numero."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, float):
+        if v != int(v) or v <= 0:
+            return None
+        return "%04d" % int(v)
+    t = re.sub(r"[\s\-]", "", str(v))
+    return t.zfill(4) if t.isdigit() and int(t) > 0 else None
+
+
+def _tarja_num(v):
+    try:
+        n = int(re.sub(r"\D", "", str(v or "")) or 0)
+        return n or None
+    except Exception:
+        return None
 
 
 def leer_excel_fletes(ruta, desde, hasta):
@@ -1668,7 +1810,11 @@ def leer_excel_fletes(ruta, desde, hasta):
             lote = c.get(col["lote"]) if "lote" in col else None
             if isinstance(lote, float):
                 lote = int(lote) if lote == int(lote) else lote
+            folio = _folio(c.get(col["folio"])) if "folio" in col else None
+            boleto = _entero(a_numero(c.get(col["boleto"]))) if "boleto" in col else None
             salida.append({
+                "folio": folio, "boleto": boleto if boleto and boleto > 1000 else None,
+                "c_folio": _col_letra(col["folio"]) if "folio" in col else None,
                 "hoja": hoja, "fila": num, "fecha": f, "bruto": bruto, "tara": tara,
                 "neto": neto, "chofer": txt("chofer"), "camion": txt("camion"),
                 "lote": lote, "procedencia": txt("procedencia"),
@@ -1715,12 +1861,14 @@ def _ton(kg):
     return round((kg or 0) / 1000.0, 3)
 
 
-def cuadrar(excels, boletos, hoy_txt):
+def cuadrar(excels, boletos, hoy_txt, excluidos=None):
     """El corazon. Sin red, sin disco: entra Excel y boletos, sale el reporte.
 
-    excels  = {nombre_archivo: [filas de leer_excel_fletes]}
-    boletos = [registros de Firebase (cerrados)]
+    excels    = {nombre_archivo: [filas de leer_excel_fletes]}
+    boletos   = [registros de Firebase (cerrados), ya SIN los excluidos]
+    excluidos = {boleto: {...}} solo para explicar en la pista
     """
+    excluidos = excluidos or {}
     def dia(f):
         return datetime.strptime(f, "%Y-%m-%d")
 
@@ -1733,15 +1881,45 @@ def cuadrar(excels, boletos, hoy_txt):
 
     usados = {}          # boleto -> (archivo, fila)
     filas_todas = []     # (archivo, fila_dict, boleto_o_None, tipo)
+    por_num = {b["boleto"]: b for b in boletos}
+
+    # --- 0) V4.7: el Excel ya trae el numero de boleto (FOLIO REV). Si los
+    # pesos le cuadran (o casi), ese es. Si no se parecen en nada, el numero
+    # esta mal capturado y se cuadra por peso como siempre.
+    directos = {}        # (archivo, fila) -> (boleto, tipo)
+    for arch, filas in sorted(excels.items()):
+        for r in filas:
+            b = por_num.get(r.get("boleto"))
+            if b is None or b["boleto"] in usados or not b["_f"] or not b.get("bruto"):
+                continue
+            if abs((dia(b["_f"]) - dia(r["fecha"])).days) > CUADRE_DIAS:
+                continue
+            db = abs(int(b["bruto"]) - r["bruto"])
+            dt = abs(int(b.get("tara") or 0) - r["tara"])
+            if db == 0 and dt == 0:
+                directos[(arch, r["fila"])] = (b, "ok")
+            elif db <= CUADRE_TOL_KG and dt <= CUADRE_TOL_KG:
+                directos[(arch, r["fila"])] = (b, "peso")
+            else:
+                continue
+            usados[b["boleto"]] = (arch, r["fila"])
 
     # --- 1) cuadre exacto, archivo por archivo (cada boleto una vez por archivo)
     for arch, filas in sorted(excels.items()):
         tomados = set()
         for r in sorted(filas, key=lambda x: (x["fecha"], x["fila"])):
+            d0 = directos.get((arch, r["fila"]))
+            if d0:
+                tomados.add(d0[0]["boleto"])
+                filas_todas.append([arch, r, d0[0], d0[1]])
+                continue
             mejor = None
             for b in por_peso.get((r["bruto"], r["tara"]), []):
                 if b["boleto"] in tomados or not b["_f"]:
                     continue
+                if b["boleto"] in usados and usados[b["boleto"]][1] != r["fila"] and \
+                        (usados[b["boleto"]][0], usados[b["boleto"]][1]) in directos:
+                    continue          # ya lo tomo una fila por numero de boleto
                 dd = abs((dia(b["_f"]) - dia(r["fecha"])).days)
                 if dd <= CUADRE_DIAS and (mejor is None or dd < mejor[0]):
                     mejor = (dd, b)
@@ -1841,13 +2019,28 @@ def cuadrar(excels, boletos, hoy_txt):
     def lado_excel(arch, r):
         return {"archivo": arch, "hoja": r["hoja"], "fila": r["fila"], "fecha": r["fecha"],
                 "bruto": r["bruto"], "tara": r["tara"], "neto": r["bruto"] - r["tara"],
-                "chofer": r.get("chofer"), "camion": r.get("camion"), "lote": r.get("lote")}
+                "chofer": r.get("chofer"), "camion": r.get("camion"), "lote": r.get("lote"),
+                "folio": r.get("folio"), "boleto_excel": r.get("boleto")}
+
+    # V4.7: folio de la tarja de cada boleto. Manda el de bascula (Dato
+    # adicional); si no trae, el del Excel donde cuadro.
+    tarjas_excel = {}
+    for a, r, b, t in filas_todas:
+        if b is not None and r.get("folio"):
+            tarjas_excel.setdefault(str(b["boleto"]), r["folio"])
+
+    def tarja_de(b):
+        if b.get("tarja"):
+            return b["tarja"], "báscula"
+        f = tarjas_excel.get(str(b["boleto"]))
+        return (f, "Excel") if f else (None, None)
 
     def lado_bascula(b):
         return {"boleto": b["boleto"], "fecha": b["_f"], "entrada": b.get("entrada"),
                 "bruto": b.get("bruto"), "tara": b.get("tara"), "neto": b.get("neto"),
                 "chofer": b.get("chofer"), "placas": b.get("placas"),
-                "procedencia": b.get("procedencia"), "grupo": b.get("grupo")}
+                "procedencia": b.get("procedencia"), "grupo": b.get("grupo"),
+                "tarja": tarja_de(b)[0], "pesada": b.get("pesada")}
 
     for a, r, b, t in filas_todas:
         if a not in fams_arch:
@@ -1863,12 +2056,34 @@ def cuadrar(excels, boletos, hoy_txt):
                                       r.get("c_neto") or "", r["fila"])}
         if b is None:
             k = "x-" + _llave(a, r["hoja"], r["fecha"], r["bruto"], r["tara"])
+            pista = "No hay boleto con ese bruto y tara entre el %s y el %s." % (
+                _fecha_corta(dia(r["fecha"]) - timedelta(days=CUADRE_DIAS)),
+                _fecha_corta(dia(r["fecha"]) + timedelta(days=CUADRE_DIAS)))
+            nb = r.get("boleto")
+            if nb and nb in excluidos:
+                pista = ("El Excel trae el boleto %s, que está EXCLUIDO del Flash (%s). "
+                         "Si de verdad fue un viaje, restáurelo; si no, quite la fila del Excel."
+                         % (nb, excluidos[nb].get("motivo") or "sin motivo"))
+            elif nb and nb in por_num:
+                o = por_num[nb]
+                pista += " El Excel dice boleto %s, pero ese trae bruto %s y tara %s." % (
+                    nb, "{:,}".format(int(o.get("bruto") or 0)), "{:,}".format(int(o.get("tara") or 0)))
             alertas[k] = {"tipo": "falta_bascula", "familia": fam, "fecha": r["fecha"],
-                          "excel": lado_excel(a, r), "bascula": None,
-                          "pista": "No hay boleto con ese bruto y tara entre el %s y el %s."
-                                   % (_fecha_corta(dia(r["fecha"]) - timedelta(days=CUADRE_DIAS)),
-                                      _fecha_corta(dia(r["fecha"]) + timedelta(days=CUADRE_DIAS)))}
+                          "excel": lado_excel(a, r), "bascula": None, "pista": pista}
             continue
+        if r.get("boleto") and r["boleto"] != b["boleto"]:
+            alertas["b-%s" % b["boleto"]] = {
+                "tipo": "boleto", "familia": fam, "fecha": r["fecha"], "boleto": b["boleto"],
+                "dif": ["boleto"], "excel": lado_excel(a, r), "bascula": lado_bascula(b),
+                "pista": "En el Excel dice boleto %s, pero bruto y tara son los del boleto %s. "
+                         "Revisar el número de boleto en el Excel." % (r["boleto"], b["boleto"])}
+        tb = b.get("tarja")
+        if tb and r.get("folio") and _tarja_num(tb) != _tarja_num(r["folio"]):
+            alertas["f-%s" % b["boleto"]] = {
+                "tipo": "folio", "familia": fam, "fecha": r["fecha"], "boleto": b["boleto"],
+                "dif": ["folio"], "excel": lado_excel(a, r), "bascula": lado_bascula(b),
+                "pista": "La tarja en báscula dice %s y en el Excel dice %s (celda %s%s). "
+                         "Revisar cuál es el bueno con la tarja física." % (tb, r["folio"], r.get("c_folio") or "", r["fila"])}
         if t == "peso":
             campos, celda = [], []
             if int(b["bruto"]) != r["bruto"]:
@@ -1996,11 +2211,58 @@ def cuadrar(excels, boletos, hoy_txt):
                     "dif": ["bruto"] if db else [], "excel": None,
                     "otro": lado_bascula(orig), "bascula": lado_bascula(dup),
                     "pista": ("Mismo %s, mismo día y bruto %s que el boleto %s%s. Posible pesada "
-                              "duplicada: si es así, cancelarla en Revuelta.%s"
+                              "duplicada: si es así, exclúyala del Flash (Alertas → Boletos excluidos).%s"
                               % ("chofer" + (" y camión" if qa[1] and qa[1] == qb[1] else ""),
                                  "igual" if db == 0 else "casi igual (%d kg)" % db, orig["boleto"],
                                  " (ese sí está en el Excel)" if orig["boleto"] in usados else "",
                                  extra))}
+
+    # --- 5c) V4.7: posible tarja usada dos veces
+    # Los folios se repiten (blocks del 0001 al 5000), asi que el folio solo
+    # no basta: misma procedencia, a menos de CUADRE_TARJA_DIAS dias y
+    # ademas el mismo chofer, las mismas placas (de verdad) o casi el mismo
+    # bruto. Si ya salio como duplicado, no se repite el aviso.
+    por_tarja = {}
+    for b in boletos:
+        n = _tarja_num(tarja_de(b)[0])
+        if not n or not b["_f"]:
+            continue
+        fam_b = grupo_de_fam(_familia(b.get("grupo"))) or _familia(b.get("grupo"))
+        por_tarja.setdefault((fam_b, n), []).append(b)
+    for (fam_b, n), lista in por_tarja.items():
+        if len(lista) < 2:
+            continue
+        lista.sort(key=lambda x: (x.get("entrada") or x["_f"], x["boleto"]))
+        for i, a in enumerate(lista):
+            for b in lista[i + 1:]:
+                if abs((dia(b["_f"]) - dia(a["_f"])).days) > CUADRE_TARJA_DIAS:
+                    continue
+                if "u-%s" % a["boleto"] in alertas or "u-%s" % b["boleto"] in alertas:
+                    continue
+                qa, qb = _quien(a), _quien(b)
+                amarre = []
+                if _mismo_chofer(qa[0], qb[0]):
+                    amarre.append("chofer")
+                if qa[1] and qa[1] == qb[1]:
+                    amarre.append("placas")
+                if a.get("bruto") and b.get("bruto") and abs(int(a["bruto"]) - int(b["bruto"])) <= CUADRE_DUP_KG:
+                    amarre.append("bruto")
+                if not amarre:
+                    continue          # mismo folio de otro block: normal
+                k = "t-%s" % b["boleto"]
+                if k in alertas:
+                    continue
+                ta, oa = tarja_de(a)
+                tb, ob = tarja_de(b)
+                alertas[k] = {
+                    "tipo": "tarja", "familia": fam_b, "fecha": b["_f"], "boleto": b["boleto"],
+                    "dif": ["tarja"], "excel": None,
+                    "otro": lado_bascula(a), "bascula": lado_bascula(b),
+                    "pista": "La tarja %s viene en el boleto %s (%s, según %s) y en el %s (%s, según %s), con el mismo %s. "
+                             "Una tarja es un solo viaje: revisar la tarja física."
+                             % ("%04d" % n, a["boleto"], _fecha_corta(dia(a["_f"])), oa,
+                                b["boleto"], _fecha_corta(dia(b["_f"])), ob,
+                                (", ".join(amarre[:-1]) + " y " + amarre[-1]) if len(amarre) > 1 else amarre[0])}
 
     # --- 6) resumen por procedencia
     por_fam = {}
@@ -2057,7 +2319,8 @@ def cuadrar(excels, boletos, hoy_txt):
             "viajes_excel": viajes, "cuadran": cuadran,
             "archivos_leidos": len(excels), "archivos_con_datos": len(fams_arch),
             "recortadas": recortadas,
-            "sin_cuadre": sorted(a for a in excels if a not in fams_arch)}
+            "sin_cuadre": sorted(a for a in excels if a not in fams_arch),
+            "tarjas": tarjas_excel}
 
 
 def usados_fila(usados, b, filas_todas):
@@ -2127,7 +2390,10 @@ def revisar_cuadre(hoy):
 
     cada = max(3, int(CFG.get("cuadre_cada_min", 15)))
     ultimo = cache.get("ultimo") or ""
+    # V4.7: si alguien excluye o restaura un boleto, se cuadra de inmediato
+    firma_excl = hashlib.sha1(json.dumps(sorted(EXCL)).encode()).hexdigest()
     if cache.get("firma") == firma and cache.get("desde") == desde and ultimo and \
+            cache.get("excl") == firma_excl and cache.get("version") == VERSION and \
             (datetime.now() - datetime.fromisoformat(ultimo)).total_seconds() < cada * 60:
         return "sin cambios"
 
@@ -2136,12 +2402,12 @@ def revisar_cuadre(hoy):
     errores = []
     for rel, (ruta, huella) in archivos.items():
         p = previo.get(rel)
-        if p and p.get("huella") == huella and p.get("desde") == desde:
+        if p and p.get("huella") == huella and p.get("desde") == desde and p.get("v") == VERSION:
             nuevos[rel] = p
             continue
         try:
             filas = leer_excel_fletes(ruta, desde, hoy_txt)
-            nuevos[rel] = {"huella": huella, "desde": desde, "filas": filas}
+            nuevos[rel] = {"huella": huella, "desde": desde, "filas": filas, "v": VERSION}
         except Exception as e:
             errores.append("%s (%s)" % (rel, e))
             if p:
@@ -2167,7 +2433,7 @@ def revisar_cuadre(hoy):
     for f in [f for f in dias_b if f >= pedir_desde or f < ini]:
         del dias_b[f]
     campos = ("boleto", "entrada", "salida", "bruto", "tara", "neto", "grupo",
-              "procedencia", "chofer", "placas")
+              "procedencia", "chofer", "placas", "tarja", "pesada")
     for fecha_k, dia_b in datos.items():
         if not isinstance(dia_b, dict):
             continue
@@ -2190,7 +2456,15 @@ def revisar_cuadre(hoy):
         cache["bol_ini"] = ini
     cache["bol_dias"] = dias_b
 
-    rep = cuadrar(excels, boletos, hoy_txt)
+    # V4.7: los excluidos no se cuadran (se lee la lista de esta corrida, no
+    # lo que trae la memoria: asi una exclusion de un dia viejo cuenta ya).
+    boletos = [b for b in boletos if _entero(b.get("boleto")) not in EXCL]
+    rep = cuadrar(excels, boletos, hoy_txt, EXCL)
+    tarjas = rep.pop("tarjas", {}) or {}
+    firma_t = hashlib.sha1(json.dumps(tarjas, sort_keys=True).encode()).hexdigest()
+    if cache.get("tarjas") != firma_t:
+        enviar("tarjas_excel", tarjas)       # {boleto: "0889"} solo cuando cambia
+        cache["tarjas"] = firma_t
     rep["estado"] = {
         "ok": True, "revisado": datetime.now().isoformat(timespec="seconds"),
         "desde": desde, "carpeta": raiz, "archivos_vistos": len(archivos),
@@ -2201,7 +2475,7 @@ def revisar_cuadre(hoy):
     }
     enviar("alertas", rep)
     cache.update({"firma": firma, "desde": desde, "ultimo": datetime.now().isoformat(timespec="seconds"),
-                  "archivos": nuevos})
+                  "archivos": nuevos, "excl": firma_excl, "version": VERSION})
     _cuadre_cache_guardar(cache)
     txt = "%d alertas, %d de %d viajes cuadran" % (len(rep["lista"]), rep["cuadran"], rep["viajes_excel"])
     log("Alertas: %s (%.1fs)." % (txt, time.time() - t0))
@@ -2339,6 +2613,17 @@ def main():
                 n_dias = max(n_dias, min(dias_rec, 400))
                 log("RECALCULO pedido desde el panel: %d dias (%s)" % (dias_rec, ident))
 
+    # ---- V4.7: boletos excluidos del Flash ----
+    # Se leen cada corrida (es una lista corta). Si alguien excluyo o
+    # restauro un boleto, su dia se vuelve a procesar en esta misma corrida.
+    excl_cambios = None
+    try:
+        excl_cambios = cargar_excluidos()
+    except Exception as e:
+        log("Excluidos: no se pudieron revisar (%s). Corrida normal." % e, "WARN")
+    if EXCL:
+        log("Excluidos del Flash: %d boleto(s)" % len(EXCL))
+
     dias = [hoy - timedelta(days=i) for i in range(0, n_dias + 1)]
 
     # V4.3: viajes de Excel. En la corrida de la carga se agregan sus dias.
@@ -2351,6 +2636,21 @@ def main():
         dias.sort(reverse=True)
         log("CARGA EXCEL '%s': %d dias a procesar." % (carga_xls, len(dias)))
     xls_falla = False
+
+    # Los dias de los excluidos se agregan DESPUES de armar la ventana normal:
+    # las campanas solo ven la ventana normal (seguida), para que un dia
+    # suelto de hace un mes no confunda el calculo del tope.
+    normales = {d.strftime("%Y-%m-%d") for d in dias}
+    inicio_normal = dias[-1].strftime("%Y-%m-%d")
+    excl_dias = sorted(f for f in (excl_cambios or {}) if f)
+    for f in excl_dias:
+        if f not in normales and f not in {d.strftime("%Y-%m-%d") for d in dias}:
+            dias.append(datetime.strptime(f, "%Y-%m-%d"))
+    if excl_dias:
+        dias.sort(reverse=True)
+        log("Excluidos: cambio en %s. Se recalcula: %s." % (
+            ", ".join(str(b) for v in excl_cambios.values() for b in v), ", ".join(excl_dias)))
+    excl_falla = False
 
     total_cerrados = 0
     resumen_dia = {}
@@ -2365,6 +2665,8 @@ def main():
         if crudos is None:
             if d.strftime("%Y-%m-%d") in EXCEL:
                 xls_falla = True     # sin bascula no se mezcla: se reintenta
+            if d.strftime("%Y-%m-%d") in excl_dias:
+                excl_falla = True    # se recalcula en la siguiente corrida
             continue
         registros = [r for r in (normalizar(c, abierto=False) for c in crudos) if r]
         leidos.append((d, d.strftime("%Y-%m-%d"), registros))
@@ -2373,7 +2675,7 @@ def main():
     if n_campanas:
         try:
             campanas_abiertas = avanzar_campanas(
-                [r for _, _, regs in leidos for r in regs], dias[-1].strftime("%Y-%m-%d"))
+                [r for _, f, regs in leidos if f in normales for r in regs], inicio_normal)
             for h in campanas_abiertas:
                 log("Campanas: " + h)
         except Exception as e:
@@ -2388,6 +2690,7 @@ def main():
                 r["lote"] = lote_de(r.get("grupo"), r.get("entrada"), r.get("boleto"))
             except Exception:
                 r["lote"] = None
+            r["excluido"] = excluido(r["boleto"])     # V4.7: None borra la marca
             enviar("boletos/%s/%d" % (fecha_k, r["boleto"]), r)
         total_cerrados += len(registros)
 
@@ -2414,7 +2717,13 @@ def main():
             })
 
         if registros:
-            resumen = armar_resumen(fecha_k, registros)
+            # V4.7: los excluidos no cuentan en el resumen (Hoy, Historico,
+            # campanas). Si el dia queda vacio, el resumen queda en ceros.
+            validos = [r for r in registros if not r.get("excluido")]
+            resumen = armar_resumen(fecha_k, validos)
+            if len(validos) != len(registros):
+                resumen["excluidos"] = {"viajes": len(registros) - len(validos),
+                                        "kg": sum(r.get("neto") or 0 for r in registros if r.get("excluido"))}
             enviar("resumen/%s" % fecha_k, resumen)
             if fecha_k == hoy.strftime("%Y-%m-%d"):
                 resumen_dia = resumen
@@ -2452,6 +2761,15 @@ def main():
         log("Patio: %d camion(es) abiertos" % len(patio))
     else:
         log("Flash_Patio no respondio o no esta configurado todavia.", "WARN")
+
+    if excl_cambios is not None and not CFG.get("modo_observacion"):
+        if excl_falla or RED_CAIDA[0]:
+            if excl_dias:
+                log("Excluidos: no se pudo recalcular (bascula o red). Se repite.", "WARN")
+        elif excl_cambios or not os.path.exists(ARCHIVO_EXCL):
+            vaciar_lote()
+            if not RED_CAIDA[0]:
+                guardar_excluidos_vistos()
 
     if recalculo:
         marcar_orden(recalculo)
@@ -2509,6 +2827,7 @@ def main():
         "recalculo": recalculo or None,
         "version_pendiente": version_nueva,
         "alertas": alertas_txt,
+        "excluidos": len(EXCL) or None,
         "carpeta": BASE,
     }
     vaciar_lote()
