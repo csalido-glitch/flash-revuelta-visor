@@ -1021,7 +1021,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.16 · 18-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.17 · 18-oct-2026)</span>
   </p>
 </div>
 
@@ -1682,14 +1682,19 @@ function pintarEspacio(){
   let v30 = 0, viajes = 0;
   dias.forEach(f => { const d = S.resumen[f]||{}; const n = (d.viajes||0)+((d.excluidos||{}).viajes||0); viajes += n; if(f >= hace30) v30 += n; });
   const mes = v30*BYTES_BOLETO/1e6;
+  // V19.17: el ritmo se mide DESPUES de la primera carga (que baja todo de
+  // golpe) y solo se muestra tras 30 min; antes salia un ritmo inflado.
+  const base = BAJADO.base || {bytes:BAJADO.bytes, t:Date.now()};
   const minAb = Math.max(1, (Date.now()-BAJADO.desde)/60000), mbAb = BAJADO.bytes/1e6;
+  const minR = (Date.now()-base.t)/60000, mbR = (BAJADO.bytes-base.bytes)/1e6;
+  const ritmo = minR >= 30 ? `~${(mbR/minR*1440).toFixed(0)} MB por día si se queda abierta` : `el ritmo por día se calcula a los 30 min (faltan ${Math.ceil(30-minR)})`;
   const barra = (p, cls) => `<div style="height:10px;border-radius:999px;background:var(--grid);overflow:hidden;margin:8px 0 4px"><i style="display:block;height:100%;width:${Math.max(1,Math.min(100,p))}%;background:var(${cls})"></i></div>`;
   $("#espKpis").innerHTML =
       `<div class="al-kpi"><div class="l">Base de datos guardada</div><div class="n">~${mb.toFixed(1)} MB</div><div class="l">de 1 GB · ${pct.toFixed(1)}% usado</div>${barra(pct, pct>=85?"--critical":pct>=70?"--warning":"--good")}</div>`
     + `<div class="al-kpi"><div class="l">Boletos guardados</div><div class="n">${kgF(viajes)}</div><div class="l">en ${kgF(dias.length)} días${dias.length?" · desde el "+alFecha(dias[0]):""}</div></div>`
     + `<div class="al-kpi"><div class="l">Crecimiento</div><div class="n">+${mes.toFixed(1)} MB</div><div class="l">al mes (últimos 30 días). A este ritmo el espacio guardado no es problema.</div></div>`
-    + `<div class="al-kpi"><div class="l">Descargas del mes</div><div class="n">consola</div><div class="l">límite 10 GB al mes. Se revisa en Consola → Realtime Database → Uso. Llega un correo si un día pasa de 300 MB.</div></div>`
-    + `<div class="al-kpi"><div class="l">Esta pantalla</div><div class="n">${mbAb.toFixed(1)} MB</div><div class="l">bajados en ${minAb<90?Math.round(minAb)+" min":(minAb/60).toFixed(1)+" h"} · ~${(mbAb/minAb*1440).toFixed(0)} MB por día si se queda abierta</div></div>`;
+    + `<div class="al-kpi"><div class="l">Descargas del mes</div><div class="n">consola</div><div class="l">límite 10 GB al mes. Se revisa en Consola → Realtime Database → Uso. Llega un correo si el mes pasa de 7 GiB.</div></div>`
+    + `<div class="al-kpi"><div class="l">Esta pantalla</div><div class="n">${mbAb.toFixed(1)} MB</div><div class="l">bajados en ${minAb<90?Math.round(minAb)+" min":(minAb/60).toFixed(1)+" h"} · ${ritmo}</div></div>`;
 }
 async function cargarUsuarios(){
   pintarEspacio();
@@ -3277,6 +3282,7 @@ async function vuelta(){
   S.salud = s; sello();
 }
 async function cargar(){
+  if(S.ultCarga && !BAJADO.base) BAJADO.base = {bytes:BAJADO.bytes, t:Date.now()};   // V19.17
   S.ultCarga = Date.now();
   const [salud, resumen, patio, camp] = await Promise.all([traer("/salud"), traerResumen(), traer("/patio"),
     traer("/campanas").catch(()=>null)]);
