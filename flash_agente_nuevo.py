@@ -73,6 +73,10 @@ V4.7 - Tarja, pesada manual y boletos excluidos
     especial y comentario). Siguen en Revuelta y en /boletos marcados, pero
     no cuentan en el resumen, en las campanas ni en el cuadre. Cuando
     alguien excluye o restaura, el agente recalcula solo ese dia.
+
+V4.8 - Duplicado con su fila del Excel y sugerencia
+  La alerta de posible duplicado trae la fila del Excel de cada boleto
+  (archivo, fila, tarja) y dice cual conviene excluir y por que.
 """
 
 import hashlib
@@ -88,7 +92,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.7"
+VERSION = "4.8"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -2168,6 +2172,23 @@ def cuadrar(excels, boletos, hoy_txt, excluidos=None):
             return e.hour * 60 + e.minute
         except Exception:
             return None
+    def _sugerir(orig, dup):
+        """V4.8: cual excluir y por que, en palabras de bascula."""
+        por = []
+        if orig["boleto"] in usados and dup["boleto"] not in usados:
+            por.append("el %s sí está en el Excel y este no" % orig["boleto"])
+        if not dup.get("tara"):
+            por.append("trae tara 0")
+        elif _es_incompleto(dup):
+            por.append("trae neto 0")
+        if str(dup.get("pesada") or "").startswith("M") and not str(orig.get("pesada") or "").startswith("M"):
+            por.append("su pesada fue manual")
+        if not tarja_de(dup)[0] and tarja_de(orig)[0]:
+            por.append("no tiene tarja y el %s sí (%s)" % (orig["boleto"], tarja_de(orig)[0]))
+        if not por:
+            por.append("es el que se pesó después")
+        return {"excluir": dup["boleto"], "conservar": orig["boleto"], "por": por}
+
     por_dia = {}
     for b in boletos:
         if b.get("bruto") and b["_f"]:
@@ -2208,7 +2229,10 @@ def cuadrar(excels, boletos, hoy_txt, excluidos=None):
                 alertas.pop("i-%s" % dup["boleto"], None)
                 alertas["u-%s" % dup["boleto"]] = {
                     "tipo": "duplicado", "familia": fam, "fecha": dup["_f"], "boleto": dup["boleto"],
-                    "dif": ["bruto"] if db else [], "excel": None,
+                    "dif": ["bruto"] if db else [],
+                    "excel": lado_excel(*usados_fila(usados, dup, filas_todas)) if dup["boleto"] in usados else None,
+                    "excel_otro": lado_excel(*usados_fila(usados, orig, filas_todas)) if orig["boleto"] in usados else None,
+                    "sugerencia": _sugerir(orig, dup),
                     "otro": lado_bascula(orig), "bascula": lado_bascula(dup),
                     "pista": ("Mismo %s, mismo día y bruto %s que el boleto %s%s. Posible pesada "
                               "duplicada: si es así, exclúyala del Flash (Alertas → Boletos excluidos).%s"

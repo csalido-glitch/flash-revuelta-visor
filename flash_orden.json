@@ -1,7 +1,7 @@
 {
-  "_nota": "V4.7: tarja (Dato adicional / Excel), pesada manual, cuadre por numero de boleto, alertas de tarja y folio, boletos excluidos del Flash. La carga 2025 ya hecha conserva su id y no se repite.",
-  "id": "carga-2025-completa-b",
-  "carga_desde": "2025-01-01",
+  "_nota": "V4.8: duplicado con fila del Excel y sugerencia. RECARGA una sola vez desde 1-nov-25 (inicio de Revuelta) para llenar la Pesada (Normal/Manual) de todos los boletos.",
+  "id": "recarga-pesada-nov25",
+  "carga_desde": "2025-11-01",
   "config": {
     "dias_hacia_atras": 2,
     "equipo_esperado": "TI-00023",
@@ -18,7 +18,7 @@
     "sha256": "42e68f5149ec0128623d351ff75720cb43e6c37ecab99dbbea9ef52a8785a585"
   },
   "actualizar": {
-    "sha256": "333fc9de6f242c1be4449d7e771cab75774269eb374a83139ab906809cfbf16b",
+    "sha256": "19eb8e5bd2272219b7e1653409ed0d24f486de6e2439665b3f6ed9a4ba1fac48",
     "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }
