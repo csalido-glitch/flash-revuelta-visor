@@ -1010,13 +1010,18 @@ details summary{cursor:pointer}
       </div>
       <div class="nota" id="usMsg"></div>
     </div>
+    <div class="card" id="espCard">
+      <h2>Espacio en Firebase</h2>
+      <p class="sub">Plan gratuito (Spark) · flash-revuelta-mrt-csalido · estimado con los datos que ya trae el visor; el número exacto está en la consola de Firebase → Realtime Database → <b>Uso</b>.</p>
+      <div class="al-kpis" id="espKpis"></div>
+    </div>
     <div class="card"><details><summary><b>Registro de cambios</b></summary><div class="log" id="usLog"></div></details></div>
   </section>
 
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.15 · 17-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.16 · 18-oct-2026)</span>
   </p>
 </div>
 
@@ -1243,9 +1248,11 @@ async function traer(ruta, extra){
     const q = [t ? "auth="+encodeURIComponent(t) : "", extra||""].filter(Boolean).join("&");
     const r = await fetch(DB+encodeURI(ruta)+".json"+(q ? "?"+q : ""), {cache:"no-store"});
     if(!r.ok) return null;
-    return await r.json();
+    const txt = await r.text(); BAJADO.bytes += txt.length;   // V19.16: cuanto baja esta pantalla
+    return JSON.parse(txt);
   }catch(e){ return null; }
 }
+const BAJADO = { bytes:0, desde:Date.now() };
 /* Escritura (solo campanas y usuarios). Si las reglas lo niegan, se dice. */
 async function fb(metodo, ruta, cuerpo){
   const t = await token();
@@ -1658,7 +1665,34 @@ $("#cpGuardar").addEventListener("click", guardarNueva);
 /* ===================================================================
    V19 · USUARIOS AUTORIZADOS
    =================================================================== */
+/* V19.16 · Espacio en Firebase. Se estima sin bajar nada extra: los boletos
+   se cuentan con el resumen diario (~430 bytes cada uno, medido el
+   18-oct-26: 23,222 boletos = 10.05 MB; la consola dijo 10.24 MB en total). */
+const BYTES_BOLETO = 433;
+function espacioMB(){
+  let viajes = 0;
+  Object.values(S.resumen||{}).forEach(d => { viajes += (d && d.viajes || 0) + (d && d.excluidos && d.excluidos.viajes || 0); });
+  const otros = JSON.stringify(S.resumen||{}).length + JSON.stringify(TX.datos||{}).length + 25000;
+  return (viajes*BYTES_BOLETO + otros) / 1e6;     // MB como los cuenta la consola (1 GB = 1000 MB)
+}
+function pintarEspacio(){
+  const mb = espacioMB(), pct = mb/1000*100;
+  const dias = Object.keys(S.resumen||{}).sort();
+  const hace30 = isoDe(new Date(Date.now()-30*86400000));
+  let v30 = 0, viajes = 0;
+  dias.forEach(f => { const d = S.resumen[f]||{}; const n = (d.viajes||0)+((d.excluidos||{}).viajes||0); viajes += n; if(f >= hace30) v30 += n; });
+  const mes = v30*BYTES_BOLETO/1e6;
+  const minAb = Math.max(1, (Date.now()-BAJADO.desde)/60000), mbAb = BAJADO.bytes/1e6;
+  const barra = (p, cls) => `<div style="height:10px;border-radius:999px;background:var(--grid);overflow:hidden;margin:8px 0 4px"><i style="display:block;height:100%;width:${Math.max(1,Math.min(100,p))}%;background:var(${cls})"></i></div>`;
+  $("#espKpis").innerHTML =
+      `<div class="al-kpi"><div class="l">Base de datos guardada</div><div class="n">~${mb.toFixed(1)} MB</div><div class="l">de 1 GB · ${pct.toFixed(1)}% usado</div>${barra(pct, pct>=85?"--critical":pct>=70?"--warning":"--good")}</div>`
+    + `<div class="al-kpi"><div class="l">Boletos guardados</div><div class="n">${kgF(viajes)}</div><div class="l">en ${kgF(dias.length)} días${dias.length?" · desde el "+alFecha(dias[0]):""}</div></div>`
+    + `<div class="al-kpi"><div class="l">Crecimiento</div><div class="n">+${mes.toFixed(1)} MB</div><div class="l">al mes (últimos 30 días). A este ritmo el espacio guardado no es problema.</div></div>`
+    + `<div class="al-kpi"><div class="l">Descargas del mes</div><div class="n">consola</div><div class="l">límite 10 GB al mes. Se revisa en Consola → Realtime Database → Uso. Llega un correo si un día pasa de 300 MB.</div></div>`
+    + `<div class="al-kpi"><div class="l">Esta pantalla</div><div class="n">${mbAb.toFixed(1)} MB</div><div class="l">bajados en ${minAb<90?Math.round(minAb)+" min":(minAb/60).toFixed(1)+" h"} · ~${(mbAb/minAb*1440).toFixed(0)} MB por día si se queda abierta</div></div>`;
+}
 async function cargarUsuarios(){
+  pintarEspacio();
   const lista = (await traer("/autorizados")) || {}, hist = (await traer("/autorizados_historial")) || {};
   const filas = Object.keys(lista).sort((a,b) => String(lista[a].correo).localeCompare(String(lista[b].correo))).map(k => {
     const u = lista[k], yo = u.correo === AUTH.email;
@@ -1974,7 +2008,9 @@ function sello(){
   const s=S.salud;
   $("#pieSalud").textContent =
     "Agente v"+(s.agente||"?")+" en "+(s.equipo||"?")+" · última corrida "+cuando
-    + (s.cola_pendiente ? " · "+s.cola_pendiente+" registros en cola por enviar" : "");
+    + (s.cola_pendiente ? " · "+s.cola_pendiente+" registros en cola por enviar" : "")
+    + ((AUTH.perm && AUTH.perm.gestiona_usuarios && S.resumen && Object.keys(S.resumen).length)
+        ? " · Base de datos ~"+espacioMB().toFixed(1)+" MB de 1 GB" : "");
 }
 
 /* ===================================================================
@@ -3229,7 +3265,19 @@ async function traerResumen(){
   const parcial = await traer("/resumen", "orderBy="+encodeURIComponent('"$key"')+"&startAt="+encodeURIComponent('"'+desde+'"'));
   return Object.assign({}, S.resumen || {}, parcial || {});
 }
+/* V19.16 · Cada 30 s solo se pregunta /salud (menos de 1 KB). Lo demas
+   se baja cuando el agente hizo una corrida nueva, o cada 10 min por si
+   acaso. El agente manda datos cada 3 min, asi que antes 5 de cada 6
+   lecturas bajaban lo mismo. Se ve igual de rapido y baja mucho menos. */
+const CARGA_COMPLETA_MS = 10*60000;
+async function vuelta(){
+  const s = await traer("/salud");
+  const nueva = s && s.ultima_corrida !== (S.salud && S.salud.ultima_corrida);
+  if(!s || nueva || Date.now() - (S.ultCarga||0) > CARGA_COMPLETA_MS) return cargar();
+  S.salud = s; sello();
+}
 async function cargar(){
+  S.ultCarga = Date.now();
   const [salud, resumen, patio, camp] = await Promise.all([traer("/salud"), traerResumen(), traer("/patio"),
     traer("/campanas").catch(()=>null)]);
   CAMP_DET = camp || {};
@@ -3560,7 +3608,7 @@ function alVerDetalle(boleto, fecha){
 function arrancar(){
   if(arrancar.ya) return; arrancar.ya = true;
   cargar();
-  setInterval(cargar, REFRESCO_MS);
+  setInterval(vuelta, REFRESCO_MS);
   setInterval(sello, 20000);
   if(AUTH.perm && AUTH.perm.alertas){ cargarAlertas(true); setInterval(()=>cargarAlertas(false), 5*60000);
     cargarExcluidos().then(()=>{ cargar(); }); setInterval(cargarExcluidos, 5*60000); }
