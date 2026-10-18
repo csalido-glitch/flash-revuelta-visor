@@ -605,6 +605,9 @@ body.con-login{overflow:hidden}
 .al-card.t-peso{border-left-color:var(--warning)}.al-card.t-procedencia{border-left-color:var(--s7)}
 .al-card.t-falta_bascula{border-left-color:var(--s1)}.al-card.t-incompleto{border-left-color:var(--muted)}.al-card.t-neto{border-left-color:var(--s2)}.al-card.t-duplicado{border-left-color:var(--critical)}
 .al-card.rev{opacity:.6}
+.al-xls{margin-top:6px;padding:5px 8px;border-radius:6px;background:color-mix(in srgb,var(--s3) 12%,transparent);font-size:12.5px}
+.al-xls.falta{background:color-mix(in srgb,var(--critical) 12%,transparent)}
+.al-sug{font-size:13px;margin-top:8px;padding:6px 10px;border-radius:8px;border:1px dashed color-mix(in srgb,var(--critical) 45%,var(--border));background:var(--surface)}
 .al-card.t-tarja{border-left-color:var(--s5)}.al-card.t-folio{border-left-color:var(--s4)}.al-card.t-boleto{border-left-color:var(--s2)}
 /* V19.14 · tarja, pesada manual y boletos excluidos */
 .tag.man{background:color-mix(in srgb,var(--warning) 26%,transparent);color:var(--ink)}
@@ -1013,7 +1016,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.14 · 17-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.15 · 17-oct-2026)</span>
   </p>
 </div>
 
@@ -3375,14 +3378,14 @@ function alTarjeta(k, a){
   const o = a.otro;
   const izqT = o ? "Báscula · el otro boleto" : "Excel";
   const izq = o
-    ? `Boleto <b>${o.boleto}</b> · ${esc(o.chofer||"—")}${o.placas?" · "+esc(o.placas):""}<br>${esc(o.procedencia||o.grupo||"—")}<br>${alFecha(o.fecha)}${alHora(o.entrada)} · ${kgF(o.bruto)} − ${kgF(o.tara)} = ${kgF(o.neto)} kg${alTP(o, dif)}`
+    ? `Boleto <b>${o.boleto}</b> · ${esc(o.chofer||"—")}${o.placas?" · "+esc(o.placas):""}<br>${esc(o.procedencia||o.grupo||"—")}<br>${alFecha(o.fecha)}${alHora(o.entrada)} · ${kgF(o.bruto)} − ${kgF(o.tara)} = ${kgF(o.neto)} kg${alTP(o, dif)}${alXls(a.excel_otro, a.tipo==="duplicado")}`
     : x
     ? `${esc(x.chofer||"—")}${x.camion?" · camión "+esc(x.camion):""}${x.lote?" · "+esc(x.lote):""}<br>${alFecha(x.fecha)} · ${m("bruto",kgF(x.bruto))} − ${m("tara",kgF(x.tara))} = ${kgF(x.neto)} kg`
       + (x.neto_excel!=null ? `<br>El Excel dice neto <span class="al-dif">${kgF(x.neto_excel)}</span>` : "")
       + (x.folio || x.boleto_excel ? `<br>${x.folio?"Tarja "+m("folio",esc(x.folio)):""}${x.folio&&x.boleto_excel?" · ":""}${x.boleto_excel?"Boleto en Excel "+m("boleto",esc(x.boleto_excel)):""}` : "")
     : "No aparece en el Excel";
   const der = b
-    ? `Boleto <b>${b.boleto}</b> · ${esc(b.chofer||"—")}${b.placas?" · "+esc(b.placas):""}<br>${m("procedencia",esc(b.procedencia||b.grupo||"—"))}<br>${alFecha(b.fecha)}${alHora(b.entrada)} · ${m("bruto",kgF(b.bruto))} − ${m("tara",kgF(b.tara))} = ${m("neto",kgF(b.neto))} kg${alTP(b, dif)}`
+    ? `Boleto <b>${b.boleto}</b> · ${esc(b.chofer||"—")}${b.placas?" · "+esc(b.placas):""}<br>${m("procedencia",esc(b.procedencia||b.grupo||"—"))}<br>${alFecha(b.fecha)}${alHora(b.entrada)} · ${m("bruto",kgF(b.bruto))} − ${m("tara",kgF(b.tara))} = ${m("neto",kgF(b.neto))} kg${alTP(b, dif)}${o ? alXls(x, a.tipo==="duplicado") : ""}`
     : "No hay boleto que cuadre";
   const r = AL.rev[k];
   const acc = r
@@ -3393,6 +3396,7 @@ function alTarjeta(k, a){
     <div class="al-h"><span class="al-tipo">${esc(AL_TIPOS[a.tipo]||a.tipo)}</span>${fila}<span class="al-donde">${donde} · ${esc(a.familia||"")}</span></div>
     <div class="al-cmp"><div class="al-lado"><b class="t">${izqT}</b>${izq}</div><div class="al-lado"><b class="t">Báscula${o?(a.tipo==="tarja"?" · misma tarja":" · posible duplicado"):""}</b>${der}</div></div>
     ${a.pista ? `<div class="al-pista">💡 ${esc(a.pista)}</div>` : ""}
+    ${a.sugerencia && !r ? `<div class="al-sug">👉 Sugerencia: <b>excluir el ${esc(a.sugerencia.excluir)}</b> y conservar el ${esc(a.sugerencia.conservar)}, porque ${esc((a.sugerencia.por||[]).join(", "))}.</div>` : ""}
     ${(a.tipo==="duplicado" || a.tipo==="tarja") && a.boleto && AUTH.perm && AUTH.perm.excluir && !EXC.lista[a.boleto]
       ? `<div class="nota" style="margin-top:6px">Si no fue un viaje real, escribe el <b>${a.boleto}</b> en «Boletos excluidos del Flash», abajo.</div>` : ""}
     ${a.boleto && EXC.lista[a.boleto] ? `<div class="nota" style="margin-top:6px"><span class="tag exc">Excluido</span> ${esc(txtExcl({boleto:a.boleto}))}. La alerta se va en la siguiente revisión.</div>` : ""}
@@ -3418,6 +3422,11 @@ function tarjaDe(r){ if(r && r.tarja) return {v:r.tarja, x:false};
 function txtPesada(p){ return !p ? "" : p==="N" ? "Normal" : p==="M1" ? "Manual (1ª)" : p==="M2" ? "Manual (2ª)" : "Manual (1ª y 2ª)"; }
 function tagPesada(p){ if(!p) return '<span style="color:var(--muted)">—</span>';
   return p==="N" ? '<span class="tag otro">Normal</span>' : `<span class="tag man" title="${esc(txtPesada(p))}: peso tecleado a mano">Manual</span>`; }
+/* V19.15: la fila del Excel de cada boleto del duplicado, para decidir rapido */
+function alXls(x, mostrarFalta){
+  if(!x) return mostrarFalta ? `<div class="al-xls falta">Excel: <b>no está</b></div>` : "";
+  return `<div class="al-xls">Excel ${esc(sinXlsx(x.archivo))} · <b>fila ${x.fila}</b>${x.folio?" · tarja "+esc(x.folio):""}<br>${alFecha(x.fecha)} · ${kgF(x.bruto)} − ${kgF(x.tara)} = ${kgF(x.neto)} kg</div>`;
+}
 function alTP(b, dif){ const t = b.tarja ? "Tarja "+(dif && dif.has("folio") || dif && dif.has("tarja") ? `<span class="al-dif">${esc(b.tarja)}</span>` : esc(b.tarja)) : "";
   const p = b.pesada && b.pesada!=="N" ? '<span class="tag man">Manual</span>' : "";
   return (t||p) ? "<br>"+[t,p].filter(Boolean).join(" · ") : ""; }
