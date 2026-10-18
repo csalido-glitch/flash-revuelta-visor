@@ -77,6 +77,11 @@ V4.7 - Tarja, pesada manual y boletos excluidos
 V4.8 - Duplicado con su fila del Excel y sugerencia
   La alerta de posible duplicado trae la fila del Excel de cada boleto
   (archivo, fila, tarja) y dice cual conviene excluir y por que.
+
+V4.9 - Patio de varios dias
+  Un camion que se queda de un dia para otro sin segunda pesada (se
+  descompuso, se quedo a descargar) sigue en "En patio". Se buscan los
+  abiertos de hoy y de los dias anteriores (patio_dias, 3 por omision).
 """
 
 import hashlib
@@ -92,7 +97,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.8"
+VERSION = "4.9"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -2754,8 +2759,23 @@ def main():
             log("%s: %d viajes, %.3f t" % (fecha_k, resumen["viajes"], resumen["toneladas"]))
 
     # ---- camiones en patio (boletos abiertos) ----
-    desde, hasta = rango_dia(hoy)
-    patio_crudo = leer_webservice(CFG["ws_patio"], desde, hasta)
+    # V4.9: hoy y los dias anteriores, para no perder a un camion que se
+    # quedo de un dia para otro. Si hoy no responde, se toma como caido.
+    patio_crudo = None
+    vistos_patio = set()
+    for i in range(max(1, int(CFG.get("patio_dias", 3) or 1))):
+        desde, hasta = rango_dia(hoy - timedelta(days=i))
+        crudos = leer_webservice(CFG["ws_patio"], desde, hasta)
+        if crudos is None:
+            if i == 0:
+                break
+            continue
+        patio_crudo = patio_crudo or []
+        for c in crudos:
+            clave_p = json.dumps(c, sort_keys=True, ensure_ascii=False)
+            if clave_p not in vistos_patio:
+                vistos_patio.add(clave_p)
+                patio_crudo.append(c)
     patio = []
     if patio_crudo is not None:
         ahora = datetime.now()
@@ -2774,6 +2794,8 @@ def main():
                 r["lote"] = lote_de(r.get("grupo"), r.get("entrada"), r.get("boleto"))
             except Exception:
                 r["lote"] = None
+            if any(x["boleto"] == r["boleto"] for x in patio):
+                continue          # el mismo boleto en dos dias: va una vez
             patio.append(r)
         patio.sort(key=lambda x: x.get("entrada") or "")
         # el patio es una foto del momento: se reemplaza completo, no se acumula
