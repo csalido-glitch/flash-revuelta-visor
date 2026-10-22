@@ -82,6 +82,14 @@ V4.9 - Patio de varios dias
   Un camion que se queda de un dia para otro sin segunda pesada (se
   descompuso, se quedo a descargar) sigue en "En patio". Se buscan los
   abiertos de hoy y de los dias anteriores (patio_dias, 3 por omision).
+
+V5.0 - Una sola alerta cuando solo cambia un peso, y antiguedad
+  Si el Excel trae el numero de boleto, del mismo dia, y el bruto o la
+  tara coinciden exacto, ese es el boleto aunque el otro peso este mal
+  capturado (ej. tara 9,655 en vez de 8,655). Sale UNA alerta "Peso
+  distinto" que dice la celda y el valor correcto, en lugar de dos
+  ("en bascula, no en Excel" + "en Excel, no en bascula"). Cada alerta
+  trae "abierta": desde cuando existe, para mostrar los dias que lleva.
 """
 
 import hashlib
@@ -97,7 +105,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "4.9"
+VERSION = "5.0"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -1909,6 +1917,10 @@ def cuadrar(excels, boletos, hoy_txt, excluidos=None):
                 directos[(arch, r["fila"])] = (b, "ok")
             elif db <= CUADRE_TOL_KG and dt <= CUADRE_TOL_KG:
                 directos[(arch, r["fila"])] = (b, "peso")
+            elif (db == 0 or dt == 0) and abs((dia(b["_f"]) - dia(r["fecha"])).days) <= 1:
+                # V5.0: mismo boleto, mismo dia y un peso exacto: el otro
+                # esta mal capturado. Una sola alerta con la celda a corregir.
+                directos[(arch, r["fila"])] = (b, "peso")
             else:
                 continue
             usados[b["boleto"]] = (arch, r["fila"])
@@ -2099,13 +2111,23 @@ def cuadrar(excels, boletos, hoy_txt, excluidos=None):
                 campos.append("bruto"); celda.append("%s%s" % (r["c_bruto"], r["fila"]))
             if int(b.get("tara") or 0) != r["tara"]:
                 campos.append("tara"); celda.append("%s%s" % (r["c_tara"], r["fila"]))
+            # V5.0: que celda y que valor, en palabras de quien captura
+            arreglo = []
+            if "bruto" in campos:
+                arreglo.append("celda %s%s, bruto %s → %s" % (r["c_bruto"], r["fila"], "{:,}".format(r["bruto"]),
+                                                          "{:,}".format(int(b["bruto"]))))
+            if "tara" in campos:
+                arreglo.append("celda %s%s, tara %s → %s" % (r["c_tara"], r["fila"], "{:,}".format(r["tara"]),
+                                                         "{:,}".format(int(b.get("tara") or 0))))
             alertas["p-%s" % b["boleto"]] = {
                 "tipo": "peso", "familia": fam, "fecha": r["fecha"], "boleto": b["boleto"],
                 "dif": campos, "excel": lado_excel(a, r), "bascula": lado_bascula(b),
-                "pista": "Difiere %s en %s kg. Revisar la celda %s del Excel o el boleto."
+                "corregir": arreglo,
+                "pista": "Difiere %s en %s kg contra el boleto %s; manda la báscula. Corregir la %s. "
+                         "Al guardar el Excel, la alerta se quita sola."
                          % (" y ".join(campos),
                             "{:,}".format(abs(int(b["bruto"]) - r["bruto"]) + abs(int(b.get("tara") or 0) - r["tara"])),
-                            ", ".join(celda))}
+                            b["boleto"], " y la ".join(arreglo))}
         if a in fams_arch and _familia(b.get("grupo")) not in fams_arch[a]:
             alertas["d-%s" % b["boleto"]] = {
                 "tipo": "procedencia", "familia": fam, "fecha": r["fecha"], "boleto": b["boleto"],
@@ -2489,6 +2511,19 @@ def revisar_cuadre(hoy):
     # lo que trae la memoria: asi una exclusion de un dia viejo cuenta ya).
     boletos = [b for b in boletos if _entero(b.get("boleto")) not in EXCL]
     rep = cuadrar(excels, boletos, hoy_txt, EXCL)
+    # V5.0: desde cuando existe cada alerta. La primera vez que se ve (o al
+    # estrenar la 5.0) se toma la fecha del viaje si es anterior.
+    vistas = cache.get("alerta_desde") or {}
+    ahora_txt = datetime.now().isoformat(timespec="seconds")
+    nuevas_v = {}
+    for k, al in rep["lista"].items():
+        d0 = vistas.get(k)
+        if not d0:
+            f = str(al.get("fecha") or "")[:10]
+            d0 = (f + "T00:00:00") if f and f + "T00:00:00" < ahora_txt else ahora_txt
+        nuevas_v[k] = d0
+        al["abierta"] = d0
+    cache["alerta_desde"] = nuevas_v
     tarjas = rep.pop("tarjas", {}) or {}
     firma_t = hashlib.sha1(json.dumps(tarjas, sort_keys=True).encode()).hexdigest()
     if cache.get("tarjas") != firma_t:

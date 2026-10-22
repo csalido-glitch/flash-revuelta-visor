@@ -1,5 +1,5 @@
 {
-  "_nota": "V4.9: En patio muestra tambien los camiones que se quedaron de dias anteriores sin segunda pesada (patio_dias). La recarga nov-25 ya hecha conserva su id y no se repite.",
+  "_nota": "V5.0: una sola alerta 'Peso distinto' con la celda a corregir cuando el Excel trae el boleto y solo un peso esta mal; cada alerta trae desde cuando esta abierta. La recarga nov-25 ya hecha conserva su id y no se repite.",
   "id": "recarga-pesada-nov25",
   "carga_desde": "2025-11-01",
   "config": {
@@ -19,7 +19,7 @@
     "sha256": "42e68f5149ec0128623d351ff75720cb43e6c37ecab99dbbea9ef52a8785a585"
   },
   "actualizar": {
-    "sha256": "d81bdcd4ebe1b9be749a1b985da56b1ced7a1f09c0444783265175a28e4a10fe",
+    "sha256": "c92cfaa3fe834b5a4c095193df7ca5f58dd6cc3e977bbf6d756efc85b1b8e257",
     "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }
