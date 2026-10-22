@@ -633,6 +633,15 @@ tr.excl td .tag{text-decoration:none}
 .al-dif{background:color-mix(in srgb,var(--critical) 16%,transparent);color:var(--critical);padding:0 4px;border-radius:4px;font-weight:800}
 .al-pista{font-size:12.5px;color:var(--ink-2);background:color-mix(in srgb,var(--gold) 14%,transparent);border-radius:6px;padding:4px 8px;margin-top:8px;display:inline-block}
 .al-acc{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+/* V19.18 */
+.al-edad{font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--ink-2)}
+.al-edad.vieja{background:color-mix(in srgb,var(--critical) 14%,transparent);color:var(--critical)}
+.al-fix{font-size:13px;margin-top:8px;padding:6px 10px;border-radius:8px;border:1px solid color-mix(in srgb,var(--warning) 55%,var(--border));background:color-mix(in srgb,var(--warning) 10%,transparent)}
+.al-just{margin-top:10px;padding:10px 12px;border:1px dashed var(--border);border-radius:8px;display:grid;gap:8px;grid-template-columns:minmax(0,260px) minmax(0,1fr)}
+.al-just textarea{min-height:54px}
+.al-just .al-acc{grid-column:1/-1;margin-top:0}
+@media (max-width:640px){.al-just{grid-template-columns:1fr}}
+.al-jbit{font-size:13px;margin:0 0 12px}.al-jbit>div{padding:6px 0;border-top:1px solid var(--border)}
 .al-aviso{border:1px solid color-mix(in srgb,var(--warning) 50%,var(--border));background:color-mix(in srgb,var(--warning) 12%,transparent);border-radius:10px;padding:8px 12px;font-size:13px;margin-top:10px}
 .pill{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;font-weight:700}
 .pill.azul{background:color-mix(in srgb,var(--s1) 14%,transparent);color:var(--s1)}
@@ -1021,7 +1030,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.17 · 18-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.18 · 22-oct-2026)</span>
   </p>
 </div>
 
@@ -3321,8 +3330,13 @@ async function cargar(){
    V19.11 · ALERTAS: báscula contra los Excel de fletes
    El agente (V4.4) compara y sube el resultado a /alertas. Aquí solo se
    muestra; lo único que se escribe es «revisada» en /alertas_revisadas.
+   V19.18: ya no hay «Marcar revisada». Una alerta solo se va cuando se
+   corrige el Excel (o se excluye el boleto). Lo que no se corrige en el
+   Excel se JUSTIFICA: motivo + comentario, solo con permiso Excluir, en
+   /alertas_justificadas + bitácora. /alertas_revisadas ya no se usa.
    =================================================================== */
-const AL = { datos:null, rev:{}, f:"todas", revisado:null };
+const AL = { datos:null, rev:{}, bit:{}, f:"todas", revisado:null, abrir:null };
+const JUST_MOTIVOS = ["Viaje sin flete (no va en el Excel)", "El Excel está bien, la báscula no", "Dos viajes reales (no es duplicado)", "Otros"];
 const AL_TIPOS = {
   duplicado:     "Posible duplicado en báscula",
   falta_excel:   "En báscula, no en Excel",
@@ -3342,10 +3356,10 @@ async function cargarAlertas(forzar){
   if(!(AUTH.perm && AUTH.perm.alertas)) return;
   if(!forzar && AL.datos){
     const r = await traer("/alertas/estado/revisado");
-    if(r && r === AL.revisado){ AL.rev = (await traer("/alertas_revisadas")) || {}; return pintarAlertas(); }
+    if(r && r === AL.revisado){ AL.rev = (await traer("/alertas_justificadas")) || {}; return pintarAlertas(); }
   }
-  const [d, rv] = await Promise.all([traer("/alertas"), traer("/alertas_revisadas")]);
-  AL.datos = d || {}; AL.rev = rv || {};
+  const [d, rv, bt] = await Promise.all([traer("/alertas"), traer("/alertas_justificadas"), traer("/alertas_justificadas_bitacora")]);
+  AL.datos = d || {}; AL.rev = rv || {}; AL.bit = bt || {};
   AL.revisado = (AL.datos.estado||{}).revisado || null;
   pintarAlertas();
 }
@@ -3360,6 +3374,11 @@ function alBadge(){
 }
 function alFecha(iso){ if(!iso) return "—"; return /Z$|[+-]\d\d:\d\d$/.test(String(iso)) ? fechaCorta2(new Date(iso)) : cdFecha(iso); }
 function alHora(iso){ return iso && String(iso).length>11 ? " "+hhmm(iso) : ""; }
+/* V19.18: dias que lleva abierta (el agente 5.0 manda «abierta»; antes, la fecha del viaje) */
+function alDias(a){ const d0 = a.abierta || (a.fecha ? a.fecha+"T00:00:00" : null); if(!d0) return null;
+  return Math.max(0, Math.floor((Date.now() - new Date(d0)) / 86400000)); }
+function alEdad(a){ const n = alDias(a); if(n==null) return "";
+  return `<span class="al-edad${n>=2?" vieja":""}" title="Desde ${alFecha(a.abierta||a.fecha)}">${n===0?"abierta hoy":"abierta hace "+n+" día"+(n===1?"":"s")}</span>`; }
 function pintarAlertas(){
   alBadge();
   if($("#p-alertas").classList.contains("oculto") && AL.pintado) return;
@@ -3378,8 +3397,8 @@ function pintarAlertas(){
   let mayor = null;
   Object.values(pp).forEach(p => { if(!mayor || Math.abs(p.diferencia_t||0) > Math.abs(mayor.diferencia_t||0)) mayor = p; });
   $("#alKpis").innerHTML =
-      `<div class="al-kpi ok"><div class="n">${kgF(cuad)}</div><div class="l">viajes cuadran${viajes?" ("+(cuad/viajes*100).toFixed(1)+"%)":""}</div></div>`
-    + `<div class="al-kpi ${pend?"mal":"ok"}"><div class="n">${pend}</div><div class="l">alertas sin revisar</div></div>`
+      `<div class="al-kpi ${cuad<viajes?"":"ok"}"><div class="n">${kgF(cuad)}${viajes?` <small style="font-size:15px;font-weight:600;color:var(--ink-2)">de ${kgF(viajes)}</small>`:""}</div><div class="l">viajes cuadran${viajes&&cuad<viajes?" · faltan "+kgF(viajes-cuad):""}</div></div>`
+    + `<div class="al-kpi ${pend?"mal":"ok"}"><div class="n">${pend}</div><div class="l">alertas abiertas${pend?" · se quitan al corregir el Excel":""}</div></div>`
     + `<div class="al-kpi"><div class="n">${e.archivos_con_datos||0}</div><div class="l">Excel revisados</div></div>`
     + (mayor && Math.abs(mayor.diferencia_t||0) >= 0.001
         ? `<div class="al-kpi"><div class="n">Diferencia ${tF(Math.abs(mayor.diferencia_t))} t</div><div class="l">${esc(mayor.familia)}: báscula ${mayor.diferencia_t>0?"trae más":"trae menos"} que el Excel</div></div>`
@@ -3405,13 +3424,13 @@ function pintarAlertas(){
       <td class="num">${tF(p.t_excel)}</td><td class="num">${tF(p.t_bascula)}</td>
       <td class="num" style="color:${Math.abs(dif)>=0.001?"var(--critical)":"var(--good)"};font-weight:700">${dif>0?"+":""}${tF(dif)}</td>
       <td>${txtFilas||(txtSin?"":"—")}${txtSin}</td>
-      <td>${nPend ? `<span class="pill" style="background:color-mix(in srgb,var(--critical) 14%,transparent);color:var(--critical)">${nPend} por revisar</span>` : `<span class="pill" style="background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)">✔ Cuadra</span>`}</td></tr>`;
+      <td>${nPend ? `<span class="pill" style="background:color-mix(in srgb,var(--critical) 14%,transparent);color:var(--critical)">${nPend} abierta${nPend===1?"":"s"}</span>` : `<span class="pill" style="background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)">✔ Cuadra</span>`}</td></tr>`;
   }).join("") || '<tr><td colspan="9">Sin Excel con datos en el rango.</td></tr>';
 
   /* chips */
   const cuenta = {}; Object.keys(lista).forEach(k => { if(!AL.rev[k]) cuenta[lista[k].tipo] = (cuenta[lista[k].tipo]||0)+1; });
   const nRev = Object.keys(lista).filter(k => AL.rev[k]).length;
-  const chips = [["todas","Todas ("+pend+")"]].concat(Object.keys(AL_TIPOS).filter(t=>cuenta[t]).map(t=>[t, AL_TIPOS[t]+" ("+cuenta[t]+")"])).concat([["rev","Revisadas ("+nRev+")"]]);
+  const chips = [["todas","Todas ("+pend+")"]].concat(Object.keys(AL_TIPOS).filter(t=>cuenta[t]).map(t=>[t, AL_TIPOS[t]+" ("+cuenta[t]+")"])).concat(nRev || Object.keys(AL.bit).length ? [["rev","Justificadas ("+nRev+")"]] : []);
   if(!chips.some(c=>c[0]===AL.f)) AL.f = "todas";
   $("#alChips").innerHTML = chips.map(c => `<button class="al-chip${AL.f===c[0]?" on":""}" data-f="${c[0]}">${esc(c[1])}</button>`).join("");
   $$("#alChips .al-chip").forEach(b => b.addEventListener("click", () => { AL.f = b.dataset.f; pintarAlertas(); }));
@@ -3419,9 +3438,11 @@ function pintarAlertas(){
   /* tarjetas */
   const orden = Object.keys(lista).filter(k => AL.f==="rev" ? AL.rev[k] : (!AL.rev[k] && (AL.f==="todas" || lista[k].tipo===AL.f)))
     .sort((a,b) => String(lista[b].fecha||"").localeCompare(String(lista[a].fecha||"")));
-  $("#alLista").innerHTML = orden.map(k => alTarjeta(k, lista[k])).join("") || '<p class="nota">Sin alertas en este filtro.</p>';
-  $$("#alLista [data-rev]").forEach(b => b.addEventListener("click", () => alMarcar(b.dataset.rev)));
+  const bitH = AL.f==="rev" ? alBitacora() : "";
+  $("#alLista").innerHTML = bitH + (orden.map(k => alTarjeta(k, lista[k])).join("") || '<p class="nota">Sin alertas en este filtro.</p>');
+  $$("#alLista [data-rev]").forEach(b => b.addEventListener("click", () => { AL.abrir = AL.abrir===b.dataset.rev ? null : b.dataset.rev; pintarAlertas(); }));
   $$("#alLista [data-desrev]").forEach(b => b.addEventListener("click", () => alDesmarcar(b.dataset.desrev)));
+  if(AL.abrir){ const f = document.querySelector(`#alLista [data-jform="${CSS.escape(AL.abrir)}"]`); if(f) alFormaJust(f, AL.abrir); }
   $$("#alLista [data-ver]").forEach(b => b.addEventListener("click", () => alVerDetalle(b.dataset.ver, b.dataset.fecha)));
 }
 function alTarjeta(k, a){
@@ -3441,20 +3462,52 @@ function alTarjeta(k, a){
   const der = b
     ? `Boleto <b>${b.boleto}</b> · ${esc(b.chofer||"—")}${b.placas?" · "+esc(b.placas):""}<br>${m("procedencia",esc(b.procedencia||b.grupo||"—"))}<br>${alFecha(b.fecha)}${alHora(b.entrada)} · ${m("bruto",kgF(b.bruto))} − ${m("tara",kgF(b.tara))} = ${m("neto",kgF(b.neto))} kg${alTP(b, dif)}${o ? alXls(x, a.tipo==="duplicado") : ""}`
     : "No hay boleto que cuadre";
-  const r = AL.rev[k];
+  const r = AL.rev[k], puede = !!(AUTH.perm && AUTH.perm.excluir);
   const acc = r
-    ? `<button class="btn" data-desrev="${esc(k)}">Regresar a pendientes</button><span class="nota">Revisada por ${esc(r.por||"")} · ${alFecha(r.cuando)}${alHora(r.cuando)}${r.comentario?" · «"+esc(r.comentario)+"»":""}</span>`
-    : `<button class="btn pri" data-rev="${esc(k)}">✔ Marcar revisada</button>`
-      + (b ? `<button class="btn" data-ver="${b.boleto}" data-fecha="${esc(b.fecha||a.fecha)}">Ver boleto en Detalle</button>` : "");
+    ? (puede ? `<button class="btn" data-desrev="${esc(k)}">↺ Quitar justificación</button>` : "")
+      + `<span class="nota">Justificada por ${esc(r.por||"")} · ${alFecha(r.cuando)}${alHora(r.cuando)} · <b>${esc(r.motivo||"")}</b> · «${esc(r.comentario||"")}»</span>`
+    : (b ? `<button class="btn" data-ver="${b.boleto}" data-fecha="${esc(b.fecha||a.fecha)}">Ver boleto en Detalle</button>` : "")
+      + (puede ? `<button class="btn" data-rev="${esc(k)}">Justificar…</button>` : "")
+      + `<span class="nota">${a.tipo==="duplicado"||a.tipo==="tarja" ? "Se quita al excluir el boleto que sobra." : "Se quita sola al corregir el Excel (máx. 5 min)."}</span>`;
+  const fix = !r && a.corregir && a.corregir.length ? `<div class="al-fix">✏ <b>Corregir en el Excel ${esc(sinXlsx((x||{}).archivo))}:</b> ${a.corregir.map(esc).join(" · ")} <span class="nota">(manda la báscula)</span></div>` : "";
   return `<div class="al-card t-${esc(a.tipo)}${r?" rev":""}">
-    <div class="al-h"><span class="al-tipo">${esc(AL_TIPOS[a.tipo]||a.tipo)}</span>${fila}<span class="al-donde">${donde} · ${esc(a.familia||"")}</span></div>
+    <div class="al-h"><span class="al-tipo">${esc(AL_TIPOS[a.tipo]||a.tipo)}</span>${fila}<span class="al-donde">${donde} · ${esc(a.familia||"")}</span>${r?"":alEdad(a)}</div>
     <div class="al-cmp"><div class="al-lado"><b class="t">${izqT}</b>${izq}</div><div class="al-lado"><b class="t">Báscula${o?(a.tipo==="tarja"?" · misma tarja":" · posible duplicado"):""}</b>${der}</div></div>
-    ${a.pista ? `<div class="al-pista">💡 ${esc(a.pista)}</div>` : ""}
+    ${a.pista && !fix ? `<div class="al-pista">💡 ${esc(a.pista)}</div>` : ""}${fix}
     ${a.sugerencia && !r ? `<div class="al-sug">👉 Sugerencia: <b>excluir el ${esc(a.sugerencia.excluir)}</b> y conservar el ${esc(a.sugerencia.conservar)}, porque ${esc((a.sugerencia.por||[]).join(", "))}.</div>` : ""}
     ${(a.tipo==="duplicado" || a.tipo==="tarja") && a.boleto && AUTH.perm && AUTH.perm.excluir && !EXC.lista[a.boleto]
       ? `<div class="nota" style="margin-top:6px">Si no fue un viaje real, escribe el <b>${a.boleto}</b> en «Boletos excluidos del Flash», abajo.</div>` : ""}
     ${a.boleto && EXC.lista[a.boleto] ? `<div class="nota" style="margin-top:6px"><span class="tag exc">Excluido</span> ${esc(txtExcl({boleto:a.boleto}))}. La alerta se va en la siguiente revisión.</div>` : ""}
-    <div class="al-acc">${acc}</div></div>`;
+    <div class="al-acc">${acc}</div>${AL.abrir===k && !r ? `<div class="al-just" data-jform="${esc(k)}"></div>` : ""}</div>`;
+}
+/* V19.18: justificar = para lo que NO se corrige en el Excel. Motivo + comentario, con bitácora. */
+function alFormaJust(el, k){
+  el.innerHTML = `<div class="campo"><label>Motivo</label><select class="jm">${JUST_MOTIVOS.map(x=>`<option>${esc(x)}</option>`).join("")}</select>
+      <input class="jo oculto" maxlength="60" placeholder="¿Cuál motivo?" style="margin-top:6px"></div>
+    <div class="campo"><label>Comentario (obligatorio): por qué no se corrige el Excel</label><textarea class="jc" maxlength="300" placeholder="Ej. Viaje de prueba de Ana; no se paga flete"></textarea></div>
+    <div class="al-acc"><button class="btn pri jsi" disabled>Guardar justificación</button><button class="btn jno">Cancelar</button>
+      <span class="nota">Si el error está en el Excel, mejor corrígelo: la alerta se quita sola.</span><span class="nota bad jmsg"></span></div>`;
+  const q = s => el.querySelector(s);
+  const mot = () => q(".jm").value==="Otros" ? (q(".jo").value||"").trim() : q(".jm").value;
+  const val = () => { q(".jsi").disabled = !(mot().length>=3 && (q(".jc").value||"").trim().length>=10); };
+  q(".jm").addEventListener("change", () => { q(".jo").classList.toggle("oculto", q(".jm").value!=="Otros"); val(); });
+  q(".jo").addEventListener("input", val); q(".jc").addEventListener("input", val);
+  q(".jno").addEventListener("click", () => { AL.abrir = null; pintarAlertas(); });
+  q(".jsi").addEventListener("click", async () => {
+    const a = (AL.datos.lista||{})[k] || {}, cuando = ahoraISO(), mo = mot(), com = (q(".jc").value||"").trim().slice(0,300), cambios = {};
+    cambios[`alertas_justificadas/${k}`] = {motivo:mo, comentario:com, por:AUTH.email, cuando, tipo:a.tipo||null, boleto:a.boleto||null, fecha:a.fecha||null};
+    cambios[`alertas_justificadas_bitacora/${idHist()}`] = {accion:"justificar", alerta:k, tipo:a.tipo||null, boleto:a.boleto||null, fecha:a.fecha||null, motivo:mo, comentario:com, por:AUTH.email, cuando};
+    q(".jsi").disabled = true;
+    try{ await fb("PATCH", "/", cambios); }catch(e){ q(".jmsg").textContent = e.message; q(".jsi").disabled = false; return; }
+    AL.rev[k] = cambios[`alertas_justificadas/${k}`]; AL.abrir = null;
+    AL.bit = (await traer("/alertas_justificadas_bitacora")) || AL.bit; pintarAlertas();
+  });
+}
+function alBitacora(){
+  const h = Object.values(AL.bit||{}).sort((a,b)=>String(b.cuando).localeCompare(String(a.cuando)));
+  if(!h.length) return "";
+  return `<details class="al-jbit"><summary><b>Bitácora de justificaciones</b> <span class="nota">(${h.length})</span></summary>${h.map(x =>
+    `<div><span class="nota">${alFecha(x.cuando)}${alHora(x.cuando)} · ${esc(x.por||"")}</span><br><b>${x.accion==="quitar"?"Quitó la justificación":"Justificó"}</b> ${esc(AL_TIPOS[x.tipo]||x.tipo||"")}${x.boleto?" · boleto "+esc(x.boleto):""}${x.fecha?" · "+alFecha(x.fecha):""}${x.motivo?" · "+esc(x.motivo):""} · «${esc(x.comentario||"")}»</div>`).join("")}</details>`;
 }
 /* ===================================================================
    V19.14 · TARJA, PESADA MANUAL Y BOLETOS EXCLUIDOS
@@ -3591,15 +3644,14 @@ async function exRestaurar(k){
   await cargarExcluidos(); pintarAlertas(); cargar();
 }
 
-async function alMarcar(k){
-  const c = prompt("Comentario (opcional). Ej.: «Se avisó a báscula», «Ana lo corrigió en el Excel»:", "");
-  if(c === null) return;
-  try{ await fb("PUT", "/alertas_revisadas/"+k, {por:AUTH.email, cuando:ahoraISO(), comentario:c.trim().slice(0,300)});
-       AL.rev[k] = {por:AUTH.email, cuando:ahoraISO(), comentario:c.trim()}; pintarAlertas(); }
-  catch(e){ alert(e.message); }
-}
 async function alDesmarcar(k){
-  try{ await fb("DELETE", "/alertas_revisadas/"+k); delete AL.rev[k]; pintarAlertas(); }
+  const c = prompt("La alerta vuelve a abiertas. Comentario (obligatorio):", "");
+  if(c === null) return;
+  if(c.trim().length < 5){ alert("El comentario es obligatorio (mínimo 5 letras)."); return; }
+  const j = AL.rev[k] || {}, cambios = {};
+  cambios[`alertas_justificadas/${k}`] = null;
+  cambios[`alertas_justificadas_bitacora/${idHist()}`] = {accion:"quitar", alerta:k, tipo:j.tipo||null, boleto:j.boleto||null, fecha:j.fecha||null, comentario:c.trim().slice(0,300), por:AUTH.email, cuando:ahoraISO()};
+  try{ await fb("PATCH", "/", cambios); delete AL.rev[k]; AL.bit = (await traer("/alertas_justificadas_bitacora")) || AL.bit; pintarAlertas(); }
   catch(e){ alert(e.message); }
 }
 function alVerDetalle(boleto, fecha){
