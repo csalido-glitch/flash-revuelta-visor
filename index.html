@@ -662,6 +662,8 @@ td.wrap{white-space:normal}
 .fila-ed td{background:var(--plane)}
 .log div{border-bottom:1px solid var(--grid);padding:6px 0;font-size:13px}
 details summary{cursor:pointer}
+.acc-h{font-size:13.5px;margin:14px 0 6px;color:var(--ink)}
+.acc-mal td{background:color-mix(in srgb,var(--critical) 9%,transparent)}
 </style>
 </head>
 <body data-palette="#2a78d6,#eb6834,#1baf7a,#eda100,#e87ba4">
@@ -1019,6 +1021,17 @@ details summary{cursor:pointer}
       </div>
       <div class="nota" id="usMsg"></div>
     </div>
+    <div class="card" id="accCard">
+      <h2>🕒 Accesos</h2>
+      <p class="sub">Quién ha entrado al Flash. Lo registra cada pantalla al entrar (la misma persona cuenta una vez cada 10 min). Nadie puede editarlo ni borrarlo.</p>
+      <h3 class="acc-h">⚠ Intentos sin permiso <span class="nota" id="accIntN"></span></h3>
+      <p class="nota" style="margin:0 0 6px">Entraron con contraseña pero su correo no está en la lista (últimos 30 días). Si es alguien que sí debe ver el Flash, agrégalo abajo con ese mismo correo.</p>
+      <div class="tabla-caja"><table><thead><tr><th>Correo</th><th>Intentos</th><th>Último intento</th></tr></thead><tbody id="accInt"></tbody></table></div>
+      <h3 class="acc-h">Por usuario</h3>
+      <div class="tabla-caja"><table><thead><tr><th>Usuario</th><th>Último acceso</th><th>Accesos (30 días)</th><th>Total</th></tr></thead><tbody id="accRes"></tbody></table></div>
+      <details style="margin-top:12px"><summary><b>Bitácora</b> <span class="nota">(últimos 200 accesos)</span></summary>
+        <div class="tabla-caja" style="margin-top:8px"><table><thead><tr><th>Fecha</th><th>Usuario</th></tr></thead><tbody id="accBit"></tbody></table></div></details>
+    </div>
     <div class="card" id="espCard">
       <h2>Espacio en Firebase</h2>
       <p class="sub">Plan gratuito (Spark) · flash-revuelta-mrt-csalido · estimado con los datos que ya trae el visor; el número exacto está en la consola de Firebase → Realtime Database → <b>Uso</b>.</p>
@@ -1030,7 +1043,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.18 · 22-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.19 · 29-oct-2026)</span>
   </p>
 </div>
 
@@ -1238,6 +1251,7 @@ async function despuesDeEntrar(){
   AUTH.exp = 0; await token();            // el permiso nuevo ya dice "correo confirmado"
   const perm = await traer("/autorizados/"+llaveCorreo(AUTH.email));
   if(!perm || !perm.consulta){
+    await registrarAcceso(false);   // V19.19: queda como intento sin permiso
     sesionBorrar(); AUTH.refresh = null; AUTH.idToken = null;
     return mostrarLogin("Tu correo no está en la lista de autorizados. Pide acceso a César Salido o a JC.", "bad");
   }
@@ -1247,6 +1261,7 @@ async function despuesDeEntrar(){
   $$('.tab[data-t="campanas"]').forEach(b => b.classList.toggle("oculto", !perm.gestiona_campanas));
   $$('.tab[data-t="usuarios"]').forEach(b => b.classList.toggle("oculto", !perm.gestiona_usuarios));
   $$('.tab[data-t="alertas"]').forEach(b => b.classList.toggle("oculto", !perm.alertas));
+  registrarAcceso(true);
   arrancar();
 }
 
@@ -1705,6 +1720,44 @@ function pintarEspacio(){
     + `<div class="al-kpi"><div class="l">Descargas del mes</div><div class="n">consola</div><div class="l">límite 10 GB al mes. Se revisa en Consola → Realtime Database → Uso. Llega un correo si el mes pasa de 7 GiB.</div></div>`
     + `<div class="al-kpi"><div class="l">Esta pantalla</div><div class="n">${mbAb.toFixed(1)} MB</div><div class="l">bajados en ${minAb<90?Math.round(minAb)+" min":(minAb/60).toFixed(1)+" h"} · ${ritmo}</div></div>`;
 }
+/* V19.19 · Accesos: quién entra. Cada pantalla registra su entrada (una vez cada 10 min
+   por correo). Las reglas obligan a que el correo sea el de la sesión y la hora la del
+   servidor, y no dejan editar ni borrar. Solo «Gestiona usuarios» lo lee. */
+async function registrarAcceso(permitido){
+  try{
+    const ult = JSON.parse(localStorage.getItem("flashAccUlt")||"null");
+    if(ult && ult.c === AUTH.email && Date.now() - ult.t < 10*60000) return;
+  }catch(e){}
+  const k = llaveCorreo(AUTH.email), id = "a-"+Date.now()+"-"+Math.random().toString(36).slice(2,6);
+  const reg = {correo:AUTH.email, t:{".sv":"timestamp"}, vista:"visor"}, cambios = {};
+  try{
+    if(permitido){
+      const r = await traer("/accesos_resumen/"+k);
+      cambios[`accesos/${id}`] = reg;
+      cambios[`accesos_resumen/${k}`] = {t:{".sv":"timestamp"}, n:((r && r.n) || 0) + 1};
+    } else cambios[`accesos_denegados/${id}`] = reg;
+    await fb("PATCH", "/", cambios);
+    try{ localStorage.setItem("flashAccUlt", JSON.stringify({c:AUTH.email, t:Date.now()})); }catch(e){}
+  }catch(e){ console.error("No se pudo registrar el acceso", e); }
+}
+async function cargarAccesos(lista){
+  const desde = Date.now() - 30*86400000, q = 'orderBy="t"&startAt='+desde;
+  const [res, acc, den] = await Promise.all([traer("/accesos_resumen"), traer("/accesos", q), traer("/accesos_denegados", q)]);
+  const fh = t => (typeof t === "number" && t > 0) ? fechaCorta2(new Date(t))+" "+hhmm(new Date(t).toISOString()) : "—";
+  const ints = {};
+  Object.values(den||{}).forEach(r => { const i = ints[r.correo] = ints[r.correo] || {n:0, t:0}; i.n++; i.t = Math.max(i.t, r.t||0); });
+  const li = Object.keys(ints).sort((a,b) => ints[b].t - ints[a].t);
+  $("#accIntN").textContent = "("+li.length+")";
+  $("#accInt").innerHTML = li.map(c => `<tr class="acc-mal"><td><b>${esc(c)}</b></td><td>${ints[c].n}</td><td>${fh(ints[c].t)}</td></tr>`).join("")
+    || '<tr><td colspan="3" class="nota">Ninguno. ✔</td></tr>';
+  const n30 = {}; const regs = Object.values(acc||{}).sort((a,b) => (b.t||0) - (a.t||0));
+  regs.forEach(r => { n30[r.correo] = (n30[r.correo]||0) + 1; });
+  const filas = Object.keys(lista).map(k => ({c:lista[k].correo, r:(res||{})[k]||null}))
+    .sort((a,b) => ((b.r&&b.r.t)||0) - ((a.r&&a.r.t)||0) || String(a.c).localeCompare(String(b.c)));
+  $("#accRes").innerHTML = filas.map(f => `<tr><td>${esc(f.c)}</td><td>${f.r ? fh(f.r.t) : '<span class="nota">nunca</span>'}</td><td>${n30[f.c]||0}</td><td>${f.r ? f.r.n : 0}</td></tr>`).join("");
+  $("#accBit").innerHTML = regs.slice(0,200).map(r => `<tr><td>${fh(r.t)}</td><td>${esc(r.correo)}</td></tr>`).join("")
+    || '<tr><td colspan="2" class="nota">Todavía no hay accesos registrados.</td></tr>';
+}
 async function cargarUsuarios(){
   pintarEspacio();
   const lista = (await traer("/autorizados")) || {}, hist = (await traer("/autorizados_historial")) || {};
@@ -1721,6 +1774,7 @@ async function cargarUsuarios(){
       <td class="nota">${esc(u.alta||"")}</td><td>${(yo || protegido || protegidoX) ? "" : `<button class="btn" data-quitar="${esc(k)}">Quitar</button>`}</td></tr>`;
   });
   $("#usLista").innerHTML = filas.join("") || '<tr><td colspan="8">Sin usuarios.</td></tr>';
+  cargarAccesos(lista);
   $$("#usLista input[type=checkbox]").forEach(c => c.addEventListener("change", async () => {
     const k = c.dataset.k, cambios = {};
     cambios[`autorizados/${k}/${c.dataset.c}`] = c.checked;
