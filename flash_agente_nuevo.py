@@ -90,6 +90,15 @@ V5.0 - Una sola alerta cuando solo cambia un peso, y antiguedad
   distinto" que dice la celda y el valor correcto, en lugar de dos
   ("en bascula, no en Excel" + "en Excel, no en bascula"). Cada alerta
   trae "abierta": desde cuando existe, para mostrar los dias que lleva.
+
+V5.1 - Excel concentrados fuera del cuadre
+  Algunos Excel de la carpeta del anio son resumenes que repiten viajes
+  que ya estan en el Excel de cada mina (ej. "Grafica de Jal y Mineral
+  diario 2026"). Si se cuadran, cada viaje sale dos veces y la segunda
+  copia queda como "en Excel, no en bascula". Ahora se ignoran los Excel
+  cuyo nombre EMPIEZA con algo de la lista "cuadre_ignorar" (sin acentos
+  ni mayusculas), asi tambien cae el de otro mes o anio. La lista se
+  cambia desde la orden por internet sin reinstalar.
 """
 
 import hashlib
@@ -105,7 +114,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "5.0"
+VERSION = "5.1"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -1610,6 +1619,10 @@ CUADRE_MAX_ALERTAS = 300       # tope de alertas que se suben
 CUADRE_DUP_KG = 20             # duplicado: bruto casi igual (kg)
 CUADRE_DUP_MIN = 180           # duplicado: a menos de 3 horas
 CUADRE_TARJA_DIAS = 10         # V4.7: tarja repetida, a menos de 10 dias
+# V5.1: Excel que no se cuadran (concentrados). Se compara el INICIO del
+# nombre del archivo, sin acentos ni mayusculas. La orden puede cambiarla
+# con "cuadre_ignorar": [...] ([] = no ignorar ninguno).
+CUADRE_IGNORAR = ["Grafica de Jal y Mineral"]
 #   Estimado con los Excel de 2026: en El Realito (40 viajes al dia, blocks
 #   del 0001 al 5000 en paralelo) un folio se repite como minimo a los 21
 #   dias; en las demas procedencias no se repite en menos de 77 dias. Con
@@ -2423,6 +2436,13 @@ def revisar_cuadre(hoy):
         return error
     raiz, lista_carpetas = carpetas
 
+    # V5.1: concentrados que no se cuadran
+    ign = CFG.get("cuadre_ignorar")
+    if not isinstance(ign, list):
+        ign = CUADRE_IGNORAR
+    ign = [_sin_acentos(x) for x in ign if str(x or "").strip()]
+    ignorados = []
+
     # Que archivos hay y como estan. Solo se re-lee el que cambio.
     archivos = {}
     for carpeta in lista_carpetas:
@@ -2436,6 +2456,9 @@ def revisar_cuadre(hoy):
                 except Exception:
                     continue
                 rel = os.path.relpath(ruta, raiz).replace("\\", "/")
+                if any(_sin_acentos(n).startswith(x) for x in ign):
+                    ignorados.append(rel)
+                    continue
                 archivos[rel] = (ruta, "%d-%d" % (int(st.st_mtime), st.st_size))
     firma = hashlib.sha1(json.dumps(sorted((k, v[1]) for k, v in archivos.items())).encode()).hexdigest()
 
@@ -2535,6 +2558,7 @@ def revisar_cuadre(hoy):
         "archivos_con_datos": rep.pop("archivos_con_datos"), "archivos_leidos": rep.pop("archivos_leidos"),
         "recortadas": rep.pop("recortadas") or None, "sin_cuadre": rep.pop("sin_cuadre") or None,
         "errores": errores[:10] or None, "segundos": round(time.time() - t0, 1),
+        "ignorados": sorted(ignorados) or None,
         "agente": VERSION,
     }
     enviar("alertas", rep)
