@@ -91,6 +91,15 @@ V5.0 - Una sola alerta cuando solo cambia un peso, y antiguedad
   ("en bascula, no en Excel" + "en Excel, no en bascula"). Cada alerta
   trae "abierta": desde cuando existe, para mostrar los dias que lleva.
 
+V5.2 - Producto distinto y tipo de material por Excel
+  Los Excel de fletes cuyo nombre dice JAL o MINERAL (los de Ruben
+  Cervantes: "Flete de Jal ...", "Flete Mineral de Metal Molino ...")
+  le ponen a cada boleto que cuadra el campo "tipo" (JAL, MINERAL METAL
+  MOLINO, ...). El visor lo usa para desglosar la barra de la procedencia.
+  Si bascula registro MINERAL y el Excel es de JAL (o al reves) sale la
+  alerta "producto". Revuelta no se toca; si algo falla, todo sigue como
+  la V5.1.
+
 V5.1 - Excel concentrados fuera del cuadre
   Algunos Excel de la carpeta del anio son resumenes que repiten viajes
   que ya estan en el Excel de cada mina (ej. "Grafica de Jal y Mineral
@@ -114,7 +123,7 @@ import urllib.error
 import urllib.parse
 from datetime import datetime, timedelta
 
-VERSION = "5.1"
+VERSION = "5.2"
 BASE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVO_CONFIG = os.path.join(BASE, "config.json")
 ARCHIVO_STOP = os.path.join(BASE, "STOP")
@@ -1166,6 +1175,7 @@ def es_planta(producto):
 # campanas ni en el cuadre. En Revuelta no cambia nada.
 ARCHIVO_EXCL = os.path.join(BASE, "excluidos_vistos.json")
 EXCL = {}                 # boleto (int) -> {motivo, comentario, por, cuando, fecha}
+TIPOS = {}                # V5.2: boleto (texto) -> {tipo, fecha}, lo calcula el cuadre
 EXCL_CAMPOS = ("motivo", "comentario", "por", "cuando", "fecha")
 
 
@@ -1891,6 +1901,42 @@ def _ton(kg):
     return round((kg or 0) / 1000.0, 3)
 
 
+def clase_archivo(arch):
+    """V5.2: 'JAL' o 'MINERAL' segun el NOMBRE del Excel; None si no dice."""
+    n = _sin_acentos(re.sub(r"\.xlsx$", "", str(arch or "").split("/")[-1], flags=re.I))
+    if re.search(r"\bJAL(ES)?\b", n):
+        return "JAL"
+    if re.search(r"\bMINERAL(ES)?\b", n):
+        return "MINERAL"
+    return None
+
+
+def tipo_de_archivo(arch, grupo):
+    """V5.2: nombre corto del tipo de material a partir del nombre del Excel.
+    'Flete Mineral de Metal Molino Ruben Cervantes' -> 'MINERAL METAL MOLINO'
+    'Flete de Jal Ruben Cervantes' -> 'JAL' · 'Flete de Mineral Bahuichivo (RC)'
+    -> 'MINERAL BAHUICHIVO'. Se quitan las palabras de la procedencia."""
+    if not clase_archivo(arch):
+        return None
+    n = _sin_acentos(re.sub(r"\.xlsx$", "", str(arch or "").split("/")[-1], flags=re.I))
+    n = re.sub(r"\([^)]*\)", " ", n)
+    n = re.sub(r"[^A-Z0-9 ]", " ", n)
+    quitar = set(re.findall(r"[A-Z]{3,}", _sin_acentos(grupo or ""))) | {"FLETE", "FLETES"}
+    pal = [w for w in n.split() if w not in quitar and not re.match(r"^(19|20)\d\d$", w) and not w.isdigit()]
+    while pal and pal[0] in ("DE", "DEL"):
+        pal.pop(0)
+    if len(pal) >= 2 and pal[0] in ("MINERAL", "JAL") and pal[1] in ("DE", "DEL"):
+        pal.pop(1)
+    while pal and pal[-1] in ("DE", "DEL", "Y"):
+        pal.pop()
+    return " ".join(pal)[:40] or clase_archivo(arch)
+
+
+def clase_producto(producto):
+    p = _sin_acentos(producto or "")
+    return "JAL" if p.startswith("JAL") else ("MINERAL" if p.startswith("MINERAL") else None)
+
+
 def cuadrar(excels, boletos, hoy_txt, excluidos=None):
     """El corazon. Sin red, sin disco: entra Excel y boletos, sale el reporte.
 
@@ -2074,6 +2120,7 @@ def cuadrar(excels, boletos, hoy_txt, excluidos=None):
                 "bruto": b.get("bruto"), "tara": b.get("tara"), "neto": b.get("neto"),
                 "chofer": b.get("chofer"), "placas": b.get("placas"),
                 "procedencia": b.get("procedencia"), "grupo": b.get("grupo"),
+                "producto": b.get("producto"),
                 "tarja": tarja_de(b)[0], "pesada": b.get("pesada")}
 
     for a, r, b, t in filas_todas:
@@ -2147,6 +2194,30 @@ def cuadrar(excels, boletos, hoy_txt, excluidos=None):
                 "dif": ["procedencia"], "excel": lado_excel(a, r), "bascula": lado_bascula(b),
                 "pista": "El Excel %s lo trae, pero báscula lo registró como %s."
                          % (re.sub(r"\.xlsx$", "", a.split("/")[-1], flags=re.I), b.get("procedencia") or b.get("grupo") or "?")}
+
+    # --- 3b) V5.2: tipo de material por Excel y producto distinto
+    tipos = {}
+    try:
+        for a, r, b, t in filas_todas:
+            if b is None or a not in fams_arch or _familia(b.get("grupo")) not in fams_arch[a]:
+                continue
+            ca = clase_archivo(a)
+            if not ca:
+                continue
+            tipos.setdefault(str(b["boleto"]), {"tipo": tipo_de_archivo(a, b.get("grupo")),
+                                                "fecha": b.get("_fecha") or b["_f"]})
+            cp = clase_producto(b.get("producto"))
+            if cp and cp != ca:
+                alertas["p-%s" % b["boleto"]] = {
+                    "tipo": "producto", "familia": grupo_de_fila(a, b) or _familia(b.get("grupo")),
+                    "fecha": b["_f"], "boleto": b["boleto"], "dif": ["producto"],
+                    "excel": lado_excel(a, r), "bascula": lado_bascula(b),
+                    "pista": "Báscula lo registró como %s y está en el Excel de %s (%s). "
+                             "Revisar la guía y corregir donde esté mal: el producto en Revuelta o la fila del Excel."
+                             % (b.get("producto") or "?", ca, re.sub(r"\.xlsx$", "", a.split("/")[-1], flags=re.I))}
+    except Exception as e:
+        log("Cuadre: tipos/producto no se pudieron calcular (%s)." % e, "WARN")
+        tipos = {}
 
     # --- 4) boletos de bascula sin fila, dentro de lo que el Excel ya cubre
     for b in boletos:
@@ -2384,7 +2455,7 @@ def cuadrar(excels, boletos, hoy_txt, excluidos=None):
             "archivos_leidos": len(excels), "archivos_con_datos": len(fams_arch),
             "recortadas": recortadas,
             "sin_cuadre": sorted(a for a in excels if a not in fams_arch),
-            "tarjas": tarjas_excel}
+            "tarjas": tarjas_excel, "tipos": tipos}
 
 
 def usados_fila(usados, b, filas_todas):
@@ -2497,7 +2568,8 @@ def revisar_cuadre(hoy):
     # una vez al dia y en las demas vueltas solo los ultimos 3 dias.
     ini = (datetime.strptime(desde, "%Y-%m-%d") - timedelta(days=CUADRE_DIAS)).strftime("%Y-%m-%d")
     dias_b = cache.get("bol_dias") or {}
-    completo = cache.get("bol_full") != hoy_txt or cache.get("bol_ini") != ini
+    completo = cache.get("bol_full") != hoy_txt or cache.get("bol_ini") != ini or \
+        cache.get("bol_v") != "5.2"          # V5.2: la memoria ahora guarda el producto
     pedir_desde = ini if completo else (hoy - timedelta(days=3)).strftime("%Y-%m-%d")
     datos = firebase_get_rango("boletos", pedir_desde, hoy_txt)
     if datos is None:
@@ -2507,7 +2579,7 @@ def revisar_cuadre(hoy):
     for f in [f for f in dias_b if f >= pedir_desde or f < ini]:
         del dias_b[f]
     campos = ("boleto", "entrada", "salida", "bruto", "tara", "neto", "grupo",
-              "procedencia", "chofer", "placas", "tarja", "pesada")
+              "procedencia", "chofer", "placas", "tarja", "pesada", "producto")
     for fecha_k, dia_b in datos.items():
         if not isinstance(dia_b, dict):
             continue
@@ -2528,6 +2600,7 @@ def revisar_cuadre(hoy):
     if completo:
         cache["bol_full"] = hoy_txt
         cache["bol_ini"] = ini
+        cache["bol_v"] = "5.2"
     cache["bol_dias"] = dias_b
 
     # V4.7: los excluidos no se cuadran (se lee la lista de esta corrida, no
@@ -2547,6 +2620,20 @@ def revisar_cuadre(hoy):
         nuevas_v[k] = d0
         al["abierta"] = d0
     cache["alerta_desde"] = nuevas_v
+    # V5.2: el tipo de material va dentro de cada boleto (lo lee quien tenga
+    # consulta). Solo se manda lo que cambio; la corrida normal lo conserva.
+    try:
+        tipos = rep.pop("tipos", {}) or {}
+        antes = cache.get("tipos") or {}
+        for bol, x in tipos.items():
+            if (antes.get(bol) or {}).get("tipo") != x["tipo"] and x.get("fecha"):
+                enviar("boletos/%s/%s/tipo" % (x["fecha"], bol), x["tipo"])
+        for bol, x in antes.items():
+            if bol not in tipos and x.get("fecha"):
+                enviar("boletos/%s/%s/tipo" % (x["fecha"], bol), None)
+        cache["tipos"] = tipos
+    except Exception as e:
+        log("Cuadre: no se pudieron mandar los tipos (%s)." % e, "WARN")
     tarjas = rep.pop("tarjas", {}) or {}
     firma_t = hashlib.sha1(json.dumps(tarjas, sort_keys=True).encode()).hexdigest()
     if cache.get("tarjas") != firma_t:
@@ -2707,6 +2794,13 @@ def main():
     excl_cambios = None
     try:
         excl_cambios = cargar_excluidos()
+        try:                                   # V5.2: tipos del ultimo cuadre (memoria local)
+            global TIPOS
+            TIPOS = _cuadre_cache_leer().get("tipos") or {}
+            if not isinstance(TIPOS, dict):
+                TIPOS = {}
+        except Exception:
+            TIPOS = {}
     except Exception as e:
         log("Excluidos: no se pudieron revisar (%s). Corrida normal." % e, "WARN")
     if EXCL:
@@ -2779,6 +2873,10 @@ def main():
             except Exception:
                 r["lote"] = None
             r["excluido"] = excluido(r["boleto"])     # V4.7: None borra la marca
+            try:                                   # V5.2: lo pone el cuadre
+                r["tipo"] = (TIPOS.get(str(r["boleto"])) or {}).get("tipo")
+            except Exception:
+                r.pop("tipo", None)
             enviar("boletos/%s/%d" % (fecha_k, r["boleto"]), r)
         total_cerrados += len(registros)
 

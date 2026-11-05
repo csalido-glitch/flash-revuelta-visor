@@ -1,5 +1,5 @@
 {
-  "_nota": "V5.1: los Excel concentrados (nombre que empieza con 'Grafica de Jal y Mineral') ya no se cuadran; repetian los viajes de cada mina. La lista se cambia en config.cuadre_ignorar. La recarga nov-25 ya hecha conserva su id y no se repite.",
+  "_nota": "V5.2: alerta 'Producto distinto' (Excel de Jal vs Mineral en bascula) y tipo de material por Excel (JAL, MINERAL METAL MOLINO...) para el desglose de Ruben Cervantes en el tablero. V5.1 sigue: concentrados fuera del cuadre.",
   "id": "recarga-pesada-nov25",
   "carga_desde": "2025-11-01",
   "config": {
@@ -22,7 +22,7 @@
     "sha256": "42e68f5149ec0128623d351ff75720cb43e6c37ecab99dbbea9ef52a8785a585"
   },
   "actualizar": {
-    "sha256": "9dc77be49c4295d6b2cf15bec4b6c5f838b99a3a4eb9ba08a32beb872f0221c9",
+    "sha256": "33fb56ed4b8ffe8acac3529ecc30758bb6d90214c769ac91674036cd3f2d42d4",
     "url": "https://raw.githubusercontent.com/csalido-glitch/flash-revuelta-visor/main/flash_agente_nuevo.py"
   }
 }
