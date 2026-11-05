@@ -550,6 +550,11 @@ th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
 .feed .it .cp.no { font-weight:500; color:var(--muted); opacity:.75; }
 .fila .nom .nomtx { display:flex; flex-direction:column; min-width:0; }
 .fila .nom .camp-av { font-size:11px; font-weight:600; color:var(--gold-ink); margin-top:2px; }
+/* V19.21: desglose bajo la barra (Realito por procedencia, Ruben Cervantes por tipo de material) */
+.desg { grid-column:1 / -1; margin:-8px 0 0 244px; display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12px; color:var(--muted); }
+.desg b { color:var(--ink-2); font-variant-numeric:tabular-nums; }
+.desg .av { color:var(--critical); font-weight:600; }
+@media (max-width:760px){ .desg { margin:-2px 0 0 0; } }
 .proc { display:flex; align-items:center; gap:7px; }
 .proc span.t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 td .recorta { max-width:124px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -603,7 +608,7 @@ body.con-login{overflow:hidden}
 .al-chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 .al-card{border:1px solid var(--border);border-left:4px solid var(--critical);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--surface)}
 .al-card.t-peso{border-left-color:var(--warning)}.al-card.t-procedencia{border-left-color:var(--s7)}
-.al-card.t-falta_bascula{border-left-color:var(--s1)}.al-card.t-incompleto{border-left-color:var(--muted)}.al-card.t-neto{border-left-color:var(--s2)}.al-card.t-duplicado{border-left-color:var(--critical)}
+.al-card.t-falta_bascula{border-left-color:var(--s1)}.al-card.t-incompleto{border-left-color:var(--muted)}.al-card.t-neto{border-left-color:var(--s2)}.al-card.t-duplicado{border-left-color:var(--critical)}.al-card.t-producto{border-left-color:var(--s2)}
 .al-card.rev{opacity:.6}
 .al-xls{margin-top:6px;padding:5px 8px;border-radius:6px;background:color-mix(in srgb,var(--s3) 12%,transparent);font-size:12.5px}
 .al-xls.falta{background:color-mix(in srgb,var(--critical) 12%,transparent)}
@@ -758,7 +763,7 @@ details summary{cursor:pointer}
 
     <div class="card" style="margin-top:16px">
       <h2>Toneladas por procedencia</h2>
-      <p class="sub" id="subProc">Solo lo que va a planta: mineral y jal. Realito suma Cooperativa y Ejido Algarrobal.</p>
+      <p class="sub" id="subProc">Solo lo que va a planta: mineral y jal. Realito se desglosa por Cooperativa y Ejido Algarrobal; Ruben Cervantes por tipo de material (Jal, Metal Molino…, según su Excel).</p>
       <div class="barras" id="barras"></div>
     </div>
 
@@ -1043,7 +1048,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.19 · 29-oct-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.21 · 5-nov-2026)</span>
   </p>
 </div>
 
@@ -2414,13 +2419,45 @@ function pintarBarras(min){
   // regla de contraste cuando el color queda por debajo de 3:1 en claro.
   caja.innerHTML = filas.map(([g,v],i)=>{
     const c = colorDe(g), f = fondoChip(g);
+    const dz = desglose(min.filter(r=>(r.grupo||"SIN PROCEDENCIA")===g), g);
     return `<div class="fila">
       <div class="nom"><span class="chip" style="background:${f}"></span><span class="nomtx">${esc(g)}${
         (av=>av?`<span class="camp-av">${esc(av)}</span>`:"")(avanceCamp(g))}</span></div>
       <div class="pista"><div class="relleno" style="width:${(v.kg/max*100).toFixed(1)}%;background:${f}"></div></div>
       <div class="val">${nTon(v.kg)} t<small>${v.n} ${v.n===1?"viaje":"viajes"}</small></div>
+      ${dz}
     </div>`;
   }).join("");
+}
+
+/* V19.21: desglose de una barra.
+   - Varias procedencias en el mismo grupo (El Realito): por procedencia.
+   - Si no, por tipo de material: el "tipo" lo pone el agente 5.2 segun el
+     Excel donde cuadro el viaje (JAL, MINERAL METAL MOLINO...). Mientras el
+     viaje no esta en el Excel, o si el Excel y bascula no coinciden en
+     Jal/Mineral, cuenta por el producto de bascula (bascula manda y la
+     alerta "Producto distinto" avisa).
+   Sale solo si hay dos o mas partes. */
+function claseMat(t){ const x=String(t||"").toUpperCase(); return x.startsWith("JAL")?"JAL":(x.startsWith("MINERAL")?"MINERAL":null); }
+function desglose(regs, g){
+  if(!regs.length) return "";
+  const procs = new Set(regs.map(r=>r.procedencia||g));
+  const porProc = procs.size > 1;
+  const por = {}; let distintos = 0;
+  regs.forEach(r=>{
+    let k;
+    if(porProc){ k = String(r.procedencia||g); const pre = String(g).split(" ").pop().toUpperCase(); if(k.toUpperCase().startsWith(pre+" ")) k = k.slice(pre.length+1); }
+    else {
+      const cb = claseMat(r.producto), ct = claseMat(r.tipo);
+      if(r.tipo && (!cb || cb===ct)) k = r.tipo;
+      else { k = String(r.producto||"SIN PRODUCTO").toUpperCase(); if(r.tipo && cb && ct && cb!==ct) distintos++; }
+    }
+    (por[k]=por[k]||{kg:0,n:0}); por[k].kg+=r.neto||0; por[k].n++;
+  });
+  const partes = Object.entries(por).sort((a,b)=>b[1].kg-a[1].kg);
+  if(partes.length < 2 && !distintos) return "";
+  return `<div class="desg">${partes.map(([k,v])=>`<span>${esc(k)} <b>${nTon(v.kg)} t</b> · ${v.n} ${v.n===1?"viaje":"viajes"}</span>`).join("")}${
+    distintos?`<span class="av">⚠ ${distintos}</span>`:""}</div>`;
 }
 
 function dibujarHoras(){
@@ -3401,7 +3438,8 @@ const AL_TIPOS = {
   neto:          "Neto mal calculado en el Excel",
   tarja:         "Posible tarja usada dos veces",
   folio:         "Folio de tarja distinto",
-  boleto:        "Boleto distinto en el Excel"
+  boleto:        "Boleto distinto en el Excel",
+  producto:      "Producto distinto (Jal / Mineral)"
 };
 const kgF = n => (n==null || isNaN(n)) ? "—" : Number(n).toLocaleString("es-MX");
 const tF  = n => (n==null || isNaN(n)) ? "—" : Number(n).toLocaleString("es-MX",{minimumFractionDigits:3,maximumFractionDigits:3});
@@ -3514,7 +3552,7 @@ function alTarjeta(k, a){
       + (x.folio || x.boleto_excel ? `<br>${x.folio?"Tarja "+m("folio",esc(x.folio)):""}${x.folio&&x.boleto_excel?" · ":""}${x.boleto_excel?"Boleto en Excel "+m("boleto",esc(x.boleto_excel)):""}` : "")
     : "No aparece en el Excel";
   const der = b
-    ? `Boleto <b>${b.boleto}</b> · ${esc(b.chofer||"—")}${b.placas?" · "+esc(b.placas):""}<br>${m("procedencia",esc(b.procedencia||b.grupo||"—"))}<br>${alFecha(b.fecha)}${alHora(b.entrada)} · ${m("bruto",kgF(b.bruto))} − ${m("tara",kgF(b.tara))} = ${m("neto",kgF(b.neto))} kg${alTP(b, dif)}${o ? alXls(x, a.tipo==="duplicado") : ""}`
+    ? `Boleto <b>${b.boleto}</b> · ${esc(b.chofer||"—")}${b.placas?" · "+esc(b.placas):""}<br>${m("procedencia",esc(b.procedencia||b.grupo||"—"))}${b.producto?" · "+m("producto",esc(b.producto)):""}<br>${alFecha(b.fecha)}${alHora(b.entrada)} · ${m("bruto",kgF(b.bruto))} − ${m("tara",kgF(b.tara))} = ${m("neto",kgF(b.neto))} kg${alTP(b, dif)}${o ? alXls(x, a.tipo==="duplicado") : ""}`
     : "No hay boleto que cuadre";
   const r = AL.rev[k], puede = !!(AUTH.perm && AUTH.perm.excluir);
   const acc = r
@@ -3522,7 +3560,7 @@ function alTarjeta(k, a){
       + `<span class="nota">Justificada por ${esc(r.por||"")} · ${alFecha(r.cuando)}${alHora(r.cuando)} · <b>${esc(r.motivo||"")}</b> · «${esc(r.comentario||"")}»</span>`
     : (b ? `<button class="btn" data-ver="${b.boleto}" data-fecha="${esc(b.fecha||a.fecha)}">Ver boleto en Detalle</button>` : "")
       + (puede ? `<button class="btn" data-rev="${esc(k)}">Justificar…</button>` : "")
-      + `<span class="nota">${a.tipo==="duplicado"||a.tipo==="tarja" ? "Se quita al excluir el boleto que sobra." : "Se quita sola al corregir el Excel (máx. 5 min)."}</span>`;
+      + `<span class="nota">${a.tipo==="duplicado"||a.tipo==="tarja" ? "Se quita al excluir el boleto que sobra." : a.tipo==="producto" ? "Se quita sola al corregir el producto en Revuelta o el Excel (máx. 5 min)." : "Se quita sola al corregir el Excel (máx. 5 min)."}</span>`;
   const fix = !r && a.corregir && a.corregir.length ? `<div class="al-fix">✏ <b>Corregir en el Excel ${esc(sinXlsx((x||{}).archivo))}:</b> ${a.corregir.map(esc).join(" · ")} <span class="nota">(manda la báscula)</span></div>` : "";
   return `<div class="al-card t-${esc(a.tipo)}${r?" rev":""}">
     <div class="al-h"><span class="al-tipo">${esc(AL_TIPOS[a.tipo]||a.tipo)}</span>${fila}<span class="al-donde">${donde} · ${esc(a.familia||"")}</span>${r?"":alEdad(a)}</div>
