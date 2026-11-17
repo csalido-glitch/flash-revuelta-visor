@@ -1048,7 +1048,7 @@ details summary{cursor:pointer}
   <p class="pie">
     Minera Río Tinto · el dato viene directo de la báscula, sin captura manual, salvo los viajes marcados <b>Excel</b> (2025, Revuelta caído).<br>
     <span id="pieSalud">—</span>
-    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.21 · 5-nov-2026)</span>
+    <span class="sello">Báscula Cieneguita · Urique, Chihuahua (V19.22 · 17-nov-2026)</span>
   </p>
 </div>
 
@@ -3011,10 +3011,26 @@ function llenarSelects(){
   const u=k=>[...new Set(S.detalle.map(r=>r[k]).filter(Boolean))].sort();
   set("#fProd",u("producto")); set("#fClase",u("clase"));
   /* V19.10: procedencia con grupos "todos los Realito" y "todas las Vinatita" arriba */
-  pintarProcMulti(u("procedencia"));
+  /* V19.22: la lista trae TODAS las procedencias conocidas (del resumen diario), no solo las
+     del rango cargado (max. 62 dias). Las que no tienen viajes en el rango dicen cuando si hubo. */
+  pintarProcMulti(procTodas(u("procedencia")));
   llenarCampanas();
 }
-const GRUPOS_PROC=[{k:"REALITO",t:"EL REALITO (todos)",re:/^realito|^el realito/},{k:"VINATITA",t:"VINATITA (todas)",re:/vinatita/}];
+const GRUPOS_PROC=[{k:"REALITO",t:"EL REALITO (todos)",re:/^realito|^el realito/},{k:"VINATITA",t:"VINATITA (todas)",re:/vinatita/},
+  {k:"AQ",t:"ARTURO QUEZADA (todas)",re:/arturo quezada|san lorenzo ing aq/}];   /* V19.22: misma mina, dos nombres en bascula */
+/* V19.22: procedencias de todo el historial (resumen diario) + las del rango; rango de fechas de cada una */
+const MESES_PR=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+let PROC_RANGO={};
+function procTodas(enRango){
+  PROC_RANGO={};
+  Object.entries(S.resumen||{}).forEach(([f,d])=>Object.keys((d&&d.por_grupo)||{}).forEach(g=>{
+    if(/^el realito$|^sin procedencia$/i.test(g)) return;      // Realito ya viene por razon social en el detalle
+    const r=PROC_RANGO[g]||(PROC_RANGO[g]={desde:f,hasta:f});
+    if(f<r.desde) r.desde=f; if(f>r.hasta) r.hasta=f;
+  }));
+  return [...new Set([...enRango, ...Object.keys(PROC_RANGO)])].sort();
+}
+const mesAno=f=>{ const p=String(f||"").split("-"); return p.length<2?"":MESES_PR[+p[1]-1]+"-"+p[0].slice(2); };
 const normProc=v=>String(v||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase();
 /* V19.10: seleccion multiple de procedencias (y grupos). Vacio = todas. */
 const PSEL=new Set();
@@ -3024,7 +3040,11 @@ function pintarProcMulti(ps){
   const caja=(v,t)=>`<label><input type="checkbox" value="${esc(v)}"${PSEL.has(v)?" checked":""}> ${esc(t)}</label>`;
   $("#fProcPan").innerHTML=`<div class="mp-acc"><button type="button" data-a="ninguna">Todas (quitar selección)</button></div>`
     +(grupos.length?'<div class="mp-t">Juntas</div>'+grupos.map(g=>caja("G:"+g.k,g.t)).join(""):"")
-    +'<div class="mp-t">Una por una</div>'+ps.map(v=>caja(v,v)).join("");
+    +'<div class="mp-t">Una por una</div>'+ps.map(v=>{
+        const fuera = !S.detalle.some(r=>r.procedencia===v) && PROC_RANGO[v];
+        const t = fuera ? v+"  ·  fuera del rango (viajes "+mesAno(PROC_RANGO[v].desde)+(mesAno(PROC_RANGO[v].hasta)!==mesAno(PROC_RANGO[v].desde)?" a "+mesAno(PROC_RANGO[v].hasta):"")+")" : v;
+        return caja(v,t);
+      }).join("");
   procBtnTxt();
 }
 function procBtnTxt(){
