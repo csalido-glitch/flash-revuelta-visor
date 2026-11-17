@@ -1,5 +1,5 @@
 {
-  "_nota": "V5.2: alerta 'Producto distinto' (Excel de Jal vs Mineral en bascula) y tipo de material por Excel (JAL, MINERAL METAL MOLINO...) para el desglose de Ruben Cervantes en el tablero. V5.1 sigue: concentrados fuera del cuadre.",
+  "_nota": "V19.22 (17-nov-26): solo configuracion, sin agente nuevo. Arturo Quezada: MINERAL ARTURO QUEZADA y SAN LORENZO ING AQ son la misma mina (confirmado por bascula, Alejandra, 17-nov-26) y se comparan juntas en el cuadre, igual que VINATITA. V5.2: alerta 'Producto distinto' (Excel de Jal vs Mineral en bascula) y tipo de material por Excel (JAL, MINERAL METAL MOLINO...) para el desglose de Ruben Cervantes en el tablero. V5.1 sigue: concentrados fuera del cuadre.",
   "id": "recarga-pesada-nov25",
   "carga_desde": "2025-11-01",
   "config": {
@@ -14,7 +14,12 @@
     "patio_dias": 3,
     "cuadre_ignorar": [
       "Grafica de Jal y Mineral"
-    ]
+    ],
+    "cuadre_familias": {
+      "VINATITA": "VINATITA",
+      "MINERAL ARTURO QUEZADA": "SAN LORENZO ING AQ",
+      "SAN LORENZO ING AQ": "SAN LORENZO ING AQ"
+    }
   },
   "excel": {
     "id": "2025-a",
